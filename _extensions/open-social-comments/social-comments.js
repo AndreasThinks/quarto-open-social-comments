@@ -111,11 +111,9 @@ const styles = `
 
 .social-comment .platform-indicator {
   margin-left: auto;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(0,0,0,0.05);
+  padding: 2px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .social-comment .platform-indicator i {
@@ -228,9 +226,59 @@ class SocialComments extends HTMLElement {
       // Sort all comments by date
       this.allComments.sort((a, b) => new Date(b.date) - new Date(a.date));
 
+      // Calculate total stats
+      const totalStats = this.allComments.reduce((acc, comment) => {
+        acc.replies += comment.stats.replies || 0;
+        acc.reposts += comment.stats.reposts || 0;
+        acc.likes += comment.stats.likes || 0;
+        return acc;
+      }, { replies: 0, reposts: 0, likes: 0 });
+
       // Render comments
       if (this.allComments.length > 0) {
-        document.getElementById("social-comments-list").innerHTML = "";
+        const commentsContainer = document.getElementById("social-comments-list");
+        commentsContainer.innerHTML = "";
+
+        // Add stats container
+        const statsContainer = document.createElement('div');
+        statsContainer.className = 'comments-stats';
+        statsContainer.style.cssText = `
+          display: flex;
+          gap: 20px;
+          margin-bottom: 15px;
+          color: var(--font-color);
+          font-size: 0.9rem;
+          padding: 10px;
+          background: var(--block-background-color);
+          border-radius: var(--block-border-radius);
+          border: var(--block-border-width) var(--block-border-color) solid;
+        `;
+
+        // Add stats with icons
+        statsContainer.innerHTML = `
+          <div title="Total Replies">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
+              <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
+            </svg>
+            ${totalStats.replies}
+          </div>
+          <div title="Total Boosts">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
+              <path d="M23.77 15.67c-.292-.293-.767-.293-1.06 0l-2.22 2.22V7.65c0-2.068-1.683-3.75-3.75-3.75h-5.85c-.414 0-.75.336-.75.75s.336.75.75.75h5.85c1.24 0 2.25 1.01 2.25 2.25v10.24l-2.22-2.22c-.293-.293-.768-.293-1.06 0s-.294.768 0 1.06l3.5 3.5c.145.147.337.22.53.22s.383-.072.53-.22l3.5-3.5c.294-.292.294-.767 0-1.06zm-10.66 3.28H7.26c-1.24 0-2.25-1.01-2.25-2.25V6.46l2.22 2.22c.148.147.34.22.532.22s.384-.073.53-.22c.293-.293.293-.768 0-1.06l-3.5-3.5c-.293-.294-.768-.294-1.06 0l-3.5 3.5c-.294.292-.294.767 0 1.06s.767.293 1.06 0l2.22-2.22V16.7c0 2.068 1.683 3.75 3.75 3.75h5.85c.414 0 .75-.336.75-.75s-.337-.75-.75-.75z"/>
+            </svg>
+            ${totalStats.reposts}
+          </div>
+          <div title="Total Favorites">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            ${totalStats.likes}
+          </div>
+        `;
+
+        commentsContainer.appendChild(statsContainer);
+
+        // Render individual comments
         this.allComments.forEach(comment => {
           this.renderComment(comment);
         });

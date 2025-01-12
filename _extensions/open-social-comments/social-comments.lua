@@ -2,11 +2,7 @@ local function ensureHtmlDeps()
   quarto.doc.addHtmlDependency({
       name = 'open-social-comments',
       version = '1.0.0',
-      scripts = {"social-comments.js"},
-      resources = {
-          {path = "images", file = "logo-purple.svg"},
-          {path = "images", file = "bluesky_media_kit_logo_transparent_1.png"}
-      }
+      scripts = {"social-comments.js"}
   })
 end
 
