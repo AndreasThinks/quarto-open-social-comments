@@ -36,44 +36,63 @@ const styles = `
 
 .social-comment .author {
   padding-top: 0;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  grid-template-rows: auto auto;
   gap: 0.5rem;
-  align-items: flex-start;
+  align-items: start;
 }
 
 .social-comment .author a {
   text-decoration: none;
 }
 
+.social-comment .author .avatar {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
 .social-comment .author .avatar img {
-  margin-right: 0.5rem;
   width: 48px;
   height: 48px;
-  min-width: 48px;
   border-radius: 5px;
 }
 
 .social-comment .author .details {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: grid;
+  grid-template-rows: auto auto;
   min-width: 0;
 }
 
 .social-comment .author .details .name {
   font-weight: bold;
+  grid-row: 1;
 }
 
 .social-comment .author .details .user {
   color: #5d686f;
   font-size: medium;
+  grid-row: 2;
+}
+
+.social-comment .platform-indicator {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  margin-bottom: 0.25rem;
 }
 
 .social-comment .author .date {
-  margin-left: auto;
-  font-size: small;
-  white-space: nowrap;
+  grid-column: 3;
+  grid-row: 2;
+  font-size: x-small;
+  text-align: right;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 .social-comment .content {
@@ -130,12 +149,6 @@ const styles = `
   color: #ca8f04;
 }
 
-.social-comment .platform-indicator {
-  margin-left: auto;
-  padding: 2px;
-  display: flex;
-  align-items: center;
-}
 
 .social-comment .platform-indicator i {
   font-size: 16px;
@@ -485,18 +498,18 @@ class SocialComments extends HTMLElement {
     div.innerHTML = `
       <div class="author">
         <div class="avatar">
-          <img src="${this.escapeHtml(comment.author.avatar)}" height=60 width=60 alt="">
+          <img src="${this.escapeHtml(comment.author.avatar)}" height=48 width=48 alt="">
         </div>
         <div class="details">
           <a class="name" href="${comment.author.url}" rel="nofollow">${this.escapeHtml(comment.author.name)}</a>
           <a class="user" href="${comment.author.url}" rel="nofollow">${this.escapeHtml(comment.author.handle)}</a>
         </div>
-        <a class="date" href="${comment.url}" rel="nofollow">
-          ${new Date(comment.date).toLocaleString()}
-        </a>
         <span class="platform-indicator">
           ${platformIcon}
         </span>
+        <a class="date" href="${comment.url}" rel="nofollow">
+          ${new Date(comment.date).toLocaleDateString()}<br>${new Date(comment.date).toLocaleTimeString()}
+        </a>
       </div>
       <div class="content">${comment.platform === 'mastodon' ? comment.content : this.formatBlueskyContent(comment.content)}</div>
       ${comment.attachments ? this.renderAttachments(comment.attachments) : ''}
