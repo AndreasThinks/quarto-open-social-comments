@@ -477,7 +477,7 @@ class SocialComments extends HTMLElement {
           ${platformIcon}
         </span>
       </div>
-      <div class="content">${comment.platform === 'mastodon' ? comment.content : this.escapeHtml(comment.content)}</div>
+      <div class="content">${comment.platform === 'mastodon' ? comment.content : this.formatBlueskyContent(comment.content)}</div>
       ${comment.attachments ? this.renderAttachments(comment.attachments) : ''}
       <div class="status">
         <div class="replies ${comment.stats.replies > 0 ? 'active' : ''}">
@@ -506,6 +506,52 @@ class SocialComments extends HTMLElement {
     }
 
     document.getElementById("social-comments-list").appendChild(div);
+  }
+
+  formatBlueskyContent(text) {
+    // Create arrays to store our special elements and their replacements
+    const elements = [];
+    let tempText = text;
+    let counter = 0;
+    
+    // Function to store an element and return a placeholder
+    const storePlaceholder = (element, link, display) => {
+      const placeholder = `__ELEMENT_${counter}__`;
+      elements.push({
+        placeholder,
+        html: `<a href="${this.escapeHtml(link)}" rel="nofollow">${this.escapeHtml(display)}</a>`
+      });
+      counter++;
+      return placeholder;
+    };
+
+    // Extract URLs
+    const urlPattern = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+    tempText = tempText.replace(urlPattern, (url) => 
+      storePlaceholder(url, url, url)
+    );
+
+    // Extract mentions
+    const mentionPattern = /@([a-zA-Z0-9.-]+)/g;
+    tempText = tempText.replace(mentionPattern, (match, handle) => 
+      storePlaceholder(match, `https://bsky.app/profile/${handle}`, match)
+    );
+
+    // Extract hashtags
+    const hashtagPattern = /#([a-zA-Z0-9_]+)/g;
+    tempText = tempText.replace(hashtagPattern, (match, tag) => 
+      storePlaceholder(match, `https://bsky.app/search?q=${encodeURIComponent(match)}`, match)
+    );
+
+    // Escape the remaining text
+    tempText = this.escapeHtml(tempText);
+
+    // Replace placeholders with their HTML elements
+    elements.forEach(({placeholder, html}) => {
+      tempText = tempText.replace(placeholder, html);
+    });
+
+    return tempText;
   }
 
   renderAttachments(attachments) {
