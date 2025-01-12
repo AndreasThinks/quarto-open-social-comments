@@ -4,6 +4,16 @@ This extension adds social media comments to your Quarto blog posts, supporting 
 
 > **Note**: This extension was previously named "quarto-mastodon-comments". The repository has been renamed to better reflect its expanded functionality. The old installation command will continue to work thanks to GitHub's automatic redirects.
 
+## Migration from quarto-mastodon-comments
+
+If you previously used quarto-mastodon-comments, the simplest migration path is to install open-social-comments alongside it:
+
+1. Keep your existing quarto-mastodon-comments installation to maintain compatibility with older posts
+2. Install open-social-comments using the command below
+3. For new posts, use the open-social-comments configuration format
+
+This approach ensures your existing posts continue to work while allowing you to use the expanded features in new content.
+
 ## Installing
 
 ```bash
