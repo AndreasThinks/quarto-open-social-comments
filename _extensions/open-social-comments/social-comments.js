@@ -18,12 +18,16 @@ const styles = `
   background-color: var(--block-background-color);
   border-radius: var(--block-border-radius);
   border: var(--block-border-width) var(--block-border-color) solid;
-  padding: 20px;
+  padding: 1rem;
   margin-bottom: 1.5rem;
   display: flex;
   flex-direction: column;
   color: var(--font-color);
   font-size: var(--font-size);
+  max-width: 100%;
+  box-sizing: border-box;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .social-comment p {
@@ -33,6 +37,9 @@ const styles = `
 .social-comment .author {
   padding-top: 0;
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-start;
 }
 
 .social-comment .author a {
@@ -40,14 +47,18 @@ const styles = `
 }
 
 .social-comment .author .avatar img {
-  margin-right: 1rem;
-  min-width: 60px;
+  margin-right: 0.5rem;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
   border-radius: 5px;
 }
 
 .social-comment .author .details {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
 .social-comment .author .details .name {
@@ -62,18 +73,28 @@ const styles = `
 .social-comment .author .date {
   margin-left: auto;
   font-size: small;
+  white-space: nowrap;
 }
 
 .social-comment .content {
-  margin: 15px 20px;
+  margin: 0.75rem 0;
+  width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 .social-comment .attachments {
-  margin: 0px 10px;
+  margin: 0.5rem 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .social-comment .attachments > * {
-  margin: 0px 10px;
+  margin: 0;
+  max-width: 100%;
 }
 
 .social-comment .attachments img {
@@ -113,7 +134,7 @@ const styles = `
   margin-left: auto;
   padding: 2px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .social-comment .platform-indicator i {
