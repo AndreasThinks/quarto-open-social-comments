@@ -1,15 +1,15 @@
 ---
-title: "Mastodon-comments Example"
+title: "Social Comments Example"
 filters:
-  - mastodon-comments
+  - open-social-comments
 mastodon_comments:
   user: "AndreasThinks"
   host: "fosstodon.org"
   toot_id: "111995180253316042"
+bluesky_comments:
+  post_uri: "https://bsky.app/profile/theradr.bsky.social/post/3knoaw5z4ek2v"
 ---
 
 ## Heading
 
 This filter adds formatting to heading text.
-
-
