@@ -60,6 +60,14 @@ bluesky_comments:
   post_uri: "https://bsky.app/profile/theradr.bsky.social/post/3knoaw5z4ek2v"
 ```
 
+## Acknowledgements
+
+This project builds upon and is inspired by the work of others:
+
+- The Mastodon comments component is based on the [mastodon-comments webcomponent](https://github.com/dpecos/mastodon-comments) by dpecos
+- The Bluesky comments implementation draws from [this webcomponent](https://gist.github.com/LoueeD/b7dec10b2ea56c825cbb0b3a514720ed) by LoueeD
+- Icons are provided by [Font Awesome](https://fontawesome.com/) via their CDN
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
