@@ -183,7 +183,7 @@ class SocialComments extends HTMLElement {
       <p>Join the conversation on 
         ${this.mastodonTootId ? `<a href="https://${this.mastodonHost}/@${this.mastodonUser}/${this.mastodonTootId}">Mastodon</a>` : ''}
         ${this.mastodonTootId && this.blueskyPostUri ? ' or ' : ''}
-        ${this.getAttribute("bluesky-post") ? `<a href="${this.getAttribute("bluesky-post")}">Bluesky</a>` : ''}
+        ${this.getAttribute("bluesky-post") ? `<a href="${this.getAttribute("bluesky-post").startsWith('http') ? this.getAttribute("bluesky-post") : `https://bsky.app/profile/${this.getAttribute("bluesky-post").split('/')[2]}/post/${this.getAttribute("bluesky-post").split('/').pop()}`}">Bluesky</a>` : ''}
       </p>
       <div id="social-comments-list"></div>
     `;
@@ -223,10 +223,14 @@ class SocialComments extends HTMLElement {
         await this.loadBlueskyComments();
       }
 
-      // Sort all comments by date
-      this.allComments.sort((a, b) => new Date(b.date) - new Date(a.date));
+      // Filter out original posts for display but include their stats in total
+      const originalPosts = this.allComments.filter(comment => comment.isOriginalPost);
+      const replies = this.allComments.filter(comment => !comment.isOriginalPost);
+      
+      // Sort replies by date
+      replies.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-      // Calculate total stats
+      // Calculate total stats including original posts
       const totalStats = this.allComments.reduce((acc, comment) => {
         acc.replies += comment.stats.replies || 0;
         acc.reposts += comment.stats.reposts || 0;
@@ -235,7 +239,7 @@ class SocialComments extends HTMLElement {
       }, { replies: 0, reposts: 0, likes: 0 });
 
       // Render comments
-      if (this.allComments.length > 0) {
+      if (replies.length > 0 || originalPosts.length > 0) {
         const commentsContainer = document.getElementById("social-comments-list");
         commentsContainer.innerHTML = "";
 
@@ -278,8 +282,8 @@ class SocialComments extends HTMLElement {
 
         commentsContainer.appendChild(statsContainer);
 
-        // Render individual comments
-        this.allComments.forEach(comment => {
+        // Render replies only
+        replies.forEach(comment => {
           this.renderComment(comment);
         });
       } else {
@@ -297,6 +301,35 @@ class SocialComments extends HTMLElement {
 
   async loadMastodonComments() {
     try {
+      // First get the original toot's stats
+      const statusResponse = await fetch(
+        `https://${this.mastodonHost}/api/v1/statuses/${this.mastodonTootId}`
+      );
+      const statusData = await statusResponse.json();
+      
+      // Add the original toot's stats
+      this.allComments.push({
+        platform: 'mastodon',
+        id: statusData.id,
+        content: statusData.content,
+        author: {
+          name: statusData.account.display_name,
+          handle: this.getMastodonHandle(statusData.account),
+          avatar: statusData.account.avatar_static,
+          url: statusData.account.url
+        },
+        date: statusData.created_at,
+        url: statusData.url,
+        stats: {
+          replies: statusData.replies_count,
+          reposts: statusData.reblogs_count,
+          likes: statusData.favourites_count
+        },
+        attachments: statusData.media_attachments,
+        isOriginalPost: true
+      });
+
+      // Then get the context (replies)
       const contextResponse = await fetch(
         `https://${this.mastodonHost}/api/v1/statuses/${this.mastodonTootId}/context`
       );
@@ -346,6 +379,31 @@ class SocialComments extends HTMLElement {
       }
 
       const data = await response.json();
+      
+      // Add the original post's stats
+      if (data.thread?.post) {
+        const post = data.thread.post;
+        this.allComments.push({
+          platform: 'bluesky',
+          id: post.uri,
+          content: post.record.text,
+          author: {
+            name: post.author.displayName || post.author.handle,
+            handle: post.author.handle,
+            avatar: post.author.avatar,
+            url: `https://bsky.app/profile/${post.author.did}`
+          },
+          date: post.indexedAt,
+          url: `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split('/').pop()}`,
+          stats: {
+            replies: post.replyCount,
+            reposts: post.repostCount,
+            likes: post.likeCount
+          },
+          isOriginalPost: true
+        });
+      }
+
       if (data.thread && data.thread.replies) {
         this.processBlueskyReplies(data.thread.replies);
       }
