@@ -262,7 +262,7 @@ class SocialComments extends HTMLElement {
       const replies = this.allComments.filter(comment => !comment.isOriginalPost);
       
       // Sort replies by date
-      replies.sort((a, b) => new Date(b.date) - new Date(a.date));
+      replies.sort((a, b) => new Date(a.date) - new Date(b.date));
 
       // Calculate total stats including original posts
       const totalStats = this.allComments.reduce((acc, comment) => {
@@ -465,7 +465,7 @@ class SocialComments extends HTMLElement {
           reposts: reply.post.repostCount,
           likes: reply.post.likeCount
         },
-        inReplyTo: reply.post.reply?.parent.uri
+        inReplyTo: reply.post.reply?.parent?.uri || reply.post.reply?.root?.uri
       });
 
       if (reply.replies && reply.replies.length > 0) {
@@ -487,7 +487,13 @@ class SocialComments extends HTMLElement {
     const div = document.createElement("div");
     div.classList.add("social-comment");
     
-    if (comment.inReplyTo) {
+    // Only indent if it's a reply to another reply, not to the original post
+    const isReplyToReply = comment.inReplyTo && 
+      (comment.platform === 'mastodon' ? 
+        comment.inReplyTo !== this.mastodonTootId :
+        comment.inReplyTo !== this.blueskyPostUri);
+    
+    if (isReplyToReply) {
       div.style.marginLeft = "var(--comment-indent)";
     }
 
