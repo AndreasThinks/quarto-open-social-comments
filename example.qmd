@@ -5,9 +5,9 @@ filters:
 mastodon_comments:
   user: "AndreasThinks"
   host: "fosstodon.org"
-  toot_id: "111995180253316042"
+  toot_id: "113816106546915207"
 bluesky_comments:
-  post_uri: "https://bsky.app/profile/theradr.bsky.social/post/3knoaw5z4ek2v"
+  post_uri: "https://bsky.app/profile/andreasthinks.me/post/3lfkk62sk4k2g"
 ---
 
 ## Heading
