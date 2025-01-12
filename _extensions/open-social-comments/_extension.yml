@@ -1,8 +1,7 @@
-title: Mastodon-comments
+title: Open Social Comments
 author: Andreas Varotsis
-version: 1.0.2
+version: 1.0.0
 quarto-required: ">=1.3.0"
 contributes:
   filters:
-    - mastodon-comments.lua
-
+    - social-comments.lua

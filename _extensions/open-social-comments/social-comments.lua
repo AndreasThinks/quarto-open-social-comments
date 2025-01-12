@@ -1,8 +1,12 @@
 local function ensureHtmlDeps()
   quarto.doc.addHtmlDependency({
-      name = 'social-comments',
+      name = 'open-social-comments',
       version = '1.0.0',
       scripts = {"social-comments.js"},
+      resources = {
+          {path = "images", file = "logo-purple.svg"},
+          {path = "images", file = "bluesky_media_kit_logo_transparent_1.png"}
+      }
   })
 end
 
@@ -51,11 +55,10 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 ]]
 
-      -- Include external scripts and styles directly
+      -- Include external scripts directly
       local script_html = '<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.1/purify.min.js" integrity="sha512-uHOKtSfJWScGmyyFr2O2+efpDx2nhwHU2v7MVeptzZoiC7bdF6Ny/CmZhN2AwIK1oCFiVQQ5DA/L9FSzyPNu6Q==" crossorigin="anonymous"></script>'
-      local css_html = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">'
 
       -- Insert these elements in the document's head
-      quarto.doc.includeText("in-header", script_html .. css_html .. inject_script .. js_vars)
+      quarto.doc.includeText("in-header", script_html .. inject_script .. js_vars)
   end
 end

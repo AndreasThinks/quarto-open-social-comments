@@ -110,18 +110,51 @@ const styles = `
 }
 
 .social-comment .platform-indicator {
-  font-size: 0.8em;
-  color: #888;
   margin-left: auto;
   padding: 2px 6px;
   border-radius: 4px;
   background: rgba(0,0,0,0.05);
+  display: flex;
+  align-items: center;
+}
+
+.social-comment .platform-indicator i {
+  font-size: 16px;
 }
 `;
 
 class SocialComments extends HTMLElement {
+  convertBlueskyUrl(url) {
+    // Convert https://bsky.app/profile/user.bsky.social/post/postid
+    // to at://did:plc:user.bsky.social/app.bsky.feed.post/postid
+    try {
+      const match = url.match(/https:\/\/bsky\.app\/profile\/([^\/]+)\/post\/([^\/]+)/);
+      if (match) {
+        const [_, handle, postId] = match;
+        // For the API, we need to use the handle directly without converting to did:plc format
+        return `at://${handle}/app.bsky.feed.post/${postId}`;
+      }
+      // If it's already in API format, return as is
+      if (url.startsWith('at://')) {
+        return url;
+      }
+      throw new Error('Invalid Bluesky URL format');
+    } catch (error) {
+      console.error('Error converting Bluesky URL:', error);
+      return null;
+    }
+  }
+
   constructor() {
     super();
+    
+    // Add Font Awesome CDN
+    if (!document.querySelector('link[href*="fontawesome"]')) {
+      const fontAwesomeLink = document.createElement('link');
+      fontAwesomeLink.rel = 'stylesheet';
+      fontAwesomeLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.1/css/all.min.css';
+      document.head.appendChild(fontAwesomeLink);
+    }
 
     // Mastodon config
     this.mastodonHost = mastodonHost || null;
@@ -129,7 +162,9 @@ class SocialComments extends HTMLElement {
     this.mastodonTootId = mastodonTootId || null;
 
     // Bluesky config
-    this.blueskyPostUri = this.getAttribute("bluesky-post") || null;
+    const blueskyUrl = this.getAttribute("bluesky-post") || null;
+    // Convert normal URL to API format if needed
+    this.blueskyPostUri = blueskyUrl ? this.convertBlueskyUrl(blueskyUrl) : null;
 
     this.commentsLoaded = false;
     this.allComments = [];
@@ -150,7 +185,7 @@ class SocialComments extends HTMLElement {
       <p>Join the conversation on 
         ${this.mastodonTootId ? `<a href="https://${this.mastodonHost}/@${this.mastodonUser}/${this.mastodonTootId}">Mastodon</a>` : ''}
         ${this.mastodonTootId && this.blueskyPostUri ? ' or ' : ''}
-        ${this.blueskyPostUri ? `<a href="https://bsky.app/profile/${this.blueskyPostUri.split('/')[2]}/post/${this.blueskyPostUri.split('/').pop()}">Bluesky</a>` : ''}
+        ${this.getAttribute("bluesky-post") ? `<a href="${this.getAttribute("bluesky-post")}">Bluesky</a>` : ''}
       </p>
       <div id="social-comments-list"></div>
     `;
@@ -284,7 +319,7 @@ class SocialComments extends HTMLElement {
           url: `https://bsky.app/profile/${reply.post.author.did}`
         },
         date: reply.post.indexedAt,
-        url: `https://bsky.app/profile/${reply.post.author.did}/post/${reply.post.uri.split('/').pop()}`,
+        url: `https://bsky.app/profile/${reply.post.author.handle}/post/${reply.post.uri.split('/').pop()}`,
         stats: {
           replies: reply.post.replyCount,
           reposts: reply.post.repostCount,
@@ -317,8 +352,8 @@ class SocialComments extends HTMLElement {
     }
 
     const platformIcon = comment.platform === 'mastodon' ? 
-      '<i class="fa fa-mastodon"></i>' : 
-      '<svg height="12" width="12" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm3.5 7.5H9v5H7v-5H4.5v-2h7v2z"/></svg>';
+      '<i class="fab fa-mastodon" style="color: #563acc"></i>' : 
+      '<i class="fa-brands fa-bluesky" style="color: #0085ff"></i>';
 
     div.innerHTML = `
       <div class="author">
@@ -341,17 +376,20 @@ class SocialComments extends HTMLElement {
       <div class="status">
         <div class="replies ${comment.stats.replies > 0 ? 'active' : ''}">
           <a href="${comment.url}" rel="nofollow">
-            <i class="fa fa-reply fa-fw"></i>${comment.stats.replies || ''}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+            ${comment.stats.replies || ''}
           </a>
         </div>
         <div class="${comment.platform === 'mastodon' ? 'reblogs' : 'reposts'} ${comment.stats.reposts > 0 ? 'active' : ''}">
           <a href="${comment.url}" rel="nofollow">
-            <i class="fa fa-retweet fa-fw"></i>${comment.stats.reposts || ''}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.77 15.67c-.292-.293-.767-.293-1.06 0l-2.22 2.22V7.65c0-2.068-1.683-3.75-3.75-3.75h-5.85c-.414 0-.75.336-.75.75s.336.75.75.75h5.85c1.24 0 2.25 1.01 2.25 2.25v10.24l-2.22-2.22c-.293-.293-.768-.293-1.06 0s-.294.768 0 1.06l3.5 3.5c.145.147.337.22.53.22s.383-.072.53-.22l3.5-3.5c.294-.292.294-.767 0-1.06zm-10.66 3.28H7.26c-1.24 0-2.25-1.01-2.25-2.25V6.46l2.22 2.22c.148.147.34.22.532.22s.384-.073.53-.22c.293-.293.293-.768 0-1.06l-3.5-3.5c-.293-.294-.768-.294-1.06 0l-3.5 3.5c-.294.292-.294.767 0 1.06s.767.293 1.06 0l2.22-2.22V16.7c0 2.068 1.683 3.75 3.75 3.75h5.85c.414 0 .75-.336.75-.75s-.337-.75-.75-.75z"/></svg>
+            ${comment.stats.reposts || ''}
           </a>
         </div>
         <div class="${comment.platform === 'mastodon' ? 'favourites' : 'likes'} ${comment.stats.likes > 0 ? 'active' : ''}">
           <a href="${comment.url}" rel="nofollow">
-            <i class="fa fa-star fa-fw"></i>${comment.stats.likes || ''}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            ${comment.stats.likes || ''}
           </a>
         </div>
       </div>
