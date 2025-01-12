@@ -1,26 +1,51 @@
 local function ensureHtmlDeps()
   quarto.doc.addHtmlDependency({
-      name = 'mastodon-comments',
-      version = '1.0.2',
-      scripts = {"mastodon-comments.js"},
+      name = 'social-comments',
+      version = '1.0.0',
+      scripts = {"social-comments.js"},
   })
 end
 
 function Meta(m)
   ensureHtmlDeps()
+  
+  -- Initialize variables for both platforms
+  local has_comments = false
+  local social_html = '<social-comments'
+  local js_vars = '<script type="text/javascript">\n'
+  
+  -- Handle Mastodon configuration
   if m.mastodon_comments and m.mastodon_comments.user and m.mastodon_comments.toot_id and m.mastodon_comments.host then
       local user = pandoc.utils.stringify(m.mastodon_comments.user)
       local toot_id = pandoc.utils.stringify(m.mastodon_comments.toot_id)
       local host = pandoc.utils.stringify(m.mastodon_comments.host)
-      local mastodon_html = '<mastodon-comments host="' .. host .. '" user="' .. user .. '" tootId="' .. toot_id .. '"></mastodon-comments>'
-
-      -- JavaScript to inject Mastodon comments into a specific div
+      
+      js_vars = js_vars ..
+      'var mastodonHost = "' .. host .. '";\n' ..
+      'var mastodonUser = "' .. user .. '";\n' ..
+      'var mastodonTootId = "' .. toot_id .. '";\n'
+      
+      has_comments = true
+  end
+  
+  -- Handle Bluesky configuration
+  if m.bluesky_comments and m.bluesky_comments.post_uri then
+      local post_uri = pandoc.utils.stringify(m.bluesky_comments.post_uri)
+      social_html = social_html .. ' bluesky-post="' .. post_uri .. '"'
+      has_comments = true
+  end
+  
+  social_html = social_html .. '></social-comments>'
+  js_vars = js_vars .. '</script>'
+  
+  if has_comments then
+      -- JavaScript to inject social comments into a specific div
       local inject_script = [[
 <script type="text/javascript">
 document.addEventListener('DOMContentLoaded', function() {
   var div = document.getElementById('quarto-content');
   if(div) {
-    div.innerHTML += `]] .. mastodon_html .. [[`;
+    div.innerHTML += `]] .. social_html .. [[`;
   }
 });
 </script>
@@ -31,16 +56,6 @@ document.addEventListener('DOMContentLoaded', function() {
       local css_html = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">'
 
       -- Insert these elements in the document's head
-      quarto.doc.includeText("in-header", script_html .. css_html .. inject_script)
-
-      -- JavaScript variable definitions
-      local js_vars = '<script type="text/javascript">\n' ..
-      'var mastodonHost = "' .. host .. '";\n' ..
-      'var mastodonUser = "' .. user .. '";\n' ..
-      'var mastodonTootId = "' .. toot_id .. '";\n' ..
-      '</script>'
-
-      -- Include JavaScript variables in the header
-      quarto.doc.includeText("in-header", js_vars)
+      quarto.doc.includeText("in-header", script_html .. css_html .. inject_script .. js_vars)
   end
 end
