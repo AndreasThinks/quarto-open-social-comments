@@ -1,6 +1,8 @@
 # Open Social Comments for Quarto
 
-This extension adds social media comments to your Quarto blog posts, supporting both Mastodon and Bluesky. The Mastodon integration is based on [the excellent webcomponent by dpecos](https://github.com/dpecos/mastodon-comments?tab=readme-ov-file). You can see (and leave a comment on) a [working example on my blog here](https://andreasthinks.me/posts/quarto_comments/).
+This extension adds social media comments to your Quarto blog posts, supporting both Mastodon and Bluesky.
+
+You can see (and leave a comment on) a [working example on my blog here](https://andreasthinks.me/posts/quarto_comments/open-social.html).
 
 > **Note**: This extension was previously named "quarto-mastodon-comments". The repository has been renamed to better reflect its expanded functionality. The old installation command will continue to work thanks to GitHub's automatic redirects.
 
