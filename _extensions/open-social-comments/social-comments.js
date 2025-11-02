@@ -8,11 +8,11 @@ const styles = `
   --block-border-color: var(--bs-border-color, rgba(0, 0, 0, 0.125));
   --block-background-color: var(--bs-tertiary-bg, #f8f9fa);
   --comment-indent: 40px;
-  
+
   /* Platform-specific colors that maintain brand identity */
   --mastodon-color: #563acc;
   --bluesky-color: #0085ff;
-  
+
   /* Interactive element colors */
   --link-color: var(--bs-link-color, #0d6efd);
   --link-hover-color: var(--bs-link-hover-color, #0a58ca);
@@ -59,6 +59,14 @@ const styles = `
   text-decoration: none;
 }
 
+/* Improve focus indicators for keyboard navigation */
+.social-comment .author a:focus,
+.social-comment .status a:focus {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .social-comment .author .avatar {
   grid-column: 1;
   grid-row: 1 / span 2;
@@ -85,7 +93,7 @@ const styles = `
 
 .social-comment .author .details .user {
   color: var(--font-color);
-  opacity: 0.8;
+  opacity: 0.85;
   font-size: medium;
   grid-row: 2;
 }
@@ -162,76 +170,89 @@ const styles = `
   color: var(--likes-active-color);
 }
 
-
 .social-comment .platform-indicator i {
   font-size: 16px;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(0,0,0,.1);
+  border-radius: 50%;
+  border-top-color: var(--link-color);
+  animation: spin 1s ease-in-out infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  color: #dc3545;
+  padding: 1rem;
+  background-color: #f8d7da;
+  border: 1px solid #f5c2c7;
+  border-radius: var(--block-border-radius);
+  margin: 1rem 0;
 }
 `;
 
 class SocialComments extends HTMLElement {
-  convertBlueskyUrl(url) {
-    // Convert https://bsky.app/profile/user.bsky.social/post/postid
-    // to at://did:plc:user.bsky.social/app.bsky.feed.post/postid
-    try {
-      const match = url.match(/https:\/\/bsky\.app\/profile\/([^\/]+)\/post\/([^\/]+)/);
-      if (match) {
-        const [_, handle, postId] = match;
-        // For the API, we need to use the handle directly without converting to did:plc format
-        return `at://${handle}/app.bsky.feed.post/${postId}`;
-      }
-      // If it's already in API format, return as is
-      if (url.startsWith('at://')) {
-        return url;
-      }
-      throw new Error('Invalid Bluesky URL format');
-    } catch (error) {
-      console.error('Error converting Bluesky URL:', error);
-      return null;
-    }
-  }
-
   constructor() {
     super();
-    
-    // Add Font Awesome CDN
-    if (!document.querySelector('link[href*="fontawesome"]')) {
+
+    // Load Font Awesome only once
+    if (!SocialComments.fontAwesomeLoaded) {
       const fontAwesomeLink = document.createElement('link');
       fontAwesomeLink.rel = 'stylesheet';
       fontAwesomeLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.1/css/all.min.css';
+      fontAwesomeLink.integrity = 'sha512-9xKTRVabjVeZmc+GUW8GgSmcREDunMM+Dt/GrzchfN8tkwHizc5RP4Ok/MXFFy5rIjrjY4RGs171b6+lPP+Zrg==';
+      fontAwesomeLink.crossOrigin = 'anonymous';
+      fontAwesomeLink.referrerPolicy = 'no-referrer';
       document.head.appendChild(fontAwesomeLink);
+      SocialComments.fontAwesomeLoaded = true;
     }
 
-    // Mastodon config
-    this.mastodonHost = mastodonHost || null;
-    this.mastodonUser = mastodonUser || null;
-    this.mastodonTootId = mastodonTootId || null;
+    // Read configuration from data attributes (no global variables)
+    this.mastodonHost = this.getAttribute("mastodon-host");
+    this.mastodonUser = this.getAttribute("mastodon-user");
+    this.mastodonTootId = this.getAttribute("mastodon-toot-id");
 
     // Bluesky config
-    const blueskyUrl = this.getAttribute("bluesky-post") || null;
-    // Convert normal URL to API format if needed
+    const blueskyUrl = this.getAttribute("bluesky-post");
     this.blueskyPostUri = blueskyUrl ? this.convertBlueskyUrl(blueskyUrl) : null;
+    this.blueskyDisplayUrl = blueskyUrl;
+
+    // Configuration options
+    this.cacheDuration = parseInt(this.getAttribute("cache-duration") || "15") * 60 * 1000; // Convert to ms
+    this.maxComments = parseInt(this.getAttribute("max-comments") || "0"); // 0 = unlimited
+    this.showStats = this.getAttribute("show-stats") !== "false"; // Default true
 
     this.commentsLoaded = false;
     this.allComments = [];
 
-    const styleElem = document.createElement("style");
-    styleElem.innerHTML = styles;
-    document.head.appendChild(styleElem);
+    // Add styles only once
+    if (!SocialComments.stylesLoaded) {
+      const styleElem = document.createElement("style");
+      styleElem.innerHTML = styles;
+      document.head.appendChild(styleElem);
+      SocialComments.stylesLoaded = true;
+    }
   }
 
   connectedCallback() {
     this.innerHTML = `
       <h2>Comments</h2>
       <noscript>
-        <div id="error">
+        <div class="error-message">
           Please enable JavaScript to view the social comments.
         </div>
       </noscript>
-      <p>Join the conversation on 
-        ${this.mastodonTootId ? `<a href="https://${this.mastodonHost}/@${this.mastodonUser}/${this.mastodonTootId}">Mastodon</a>` : ''}
-        ${this.mastodonTootId && this.blueskyPostUri ? ' or ' : ''}
-        ${this.getAttribute("bluesky-post") ? `<a href="${this.getAttribute("bluesky-post").startsWith('http') ? this.getAttribute("bluesky-post") : `https://bsky.app/profile/${this.getAttribute("bluesky-post").split('/')[2]}/post/${this.getAttribute("bluesky-post").split('/').pop()}`}">Bluesky</a>` : ''}
-      </p>
+      ${this.generateJoinConversationText()}
       <div id="social-comments-list"></div>
     `;
 
@@ -240,12 +261,80 @@ class SocialComments extends HTMLElement {
     if (rootStyle) {
       comments.setAttribute("style", rootStyle);
     }
-    
+
     this.loadComments();
   }
 
+  generateJoinConversationText() {
+    const links = [];
+
+    if (this.mastodonTootId && this.mastodonHost && this.mastodonUser) {
+      const url = `https://${this.mastodonHost}/@${this.mastodonUser}/${this.mastodonTootId}`;
+      links.push(`<a href="${this.escapeHtml(url)}">Mastodon</a>`);
+    }
+
+    if (this.blueskyDisplayUrl) {
+      const url = this.getSafeBlueskyDisplayUrl();
+      links.push(`<a href="${this.escapeHtml(url)}">Bluesky</a>`);
+    }
+
+    if (links.length === 0) return '';
+
+    return `<p>Join the conversation on ${links.join(' or ')}</p>`;
+  }
+
+  getSafeBlueskyDisplayUrl() {
+    try {
+      if (!this.blueskyDisplayUrl) return '';
+
+      if (this.blueskyDisplayUrl.startsWith('http')) {
+        return this.blueskyDisplayUrl;
+      }
+
+      // Convert at:// format to https://
+      if (this.blueskyDisplayUrl.startsWith('at://')) {
+        const parts = this.blueskyDisplayUrl.split('/');
+        if (parts.length >= 5) {
+          const handle = parts[2];
+          const postId = parts[4];
+          return `https://bsky.app/profile/${handle}/post/${postId}`;
+        }
+      }
+
+      return this.blueskyDisplayUrl;
+    } catch (error) {
+      console.error('Error formatting Bluesky URL:', error);
+      return '';
+    }
+  }
+
+  convertBlueskyUrl(url) {
+    try {
+      if (!url) return null;
+
+      // Handle https://bsky.app URLs
+      const match = url.match(/https:\/\/bsky\.app\/profile\/([^\/]+)\/post\/([^\/]+)/);
+      if (match) {
+        const [_, handle, postId] = match;
+        return `at://${handle}/app.bsky.feed.post/${postId}`;
+      }
+
+      // If already in API format, return as is
+      if (url.startsWith('at://')) {
+        return url;
+      }
+
+      console.error('Invalid Bluesky URL format:', url);
+      return null;
+    } catch (error) {
+      console.error('Error converting Bluesky URL:', error);
+      return null;
+    }
+  }
+
   escapeHtml(unsafe) {
-    return (unsafe || "")
+    if (!unsafe) return "";
+    return String(unsafe)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
@@ -253,86 +342,147 @@ class SocialComments extends HTMLElement {
       .replace(/'/g, "&#039;");
   }
 
+  // Cache management
+  getCacheKey(platform) {
+    if (platform === 'mastodon') {
+      return `social-comments-mastodon-${this.mastodonHost}-${this.mastodonTootId}`;
+    } else if (platform === 'bluesky') {
+      return `social-comments-bluesky-${this.blueskyPostUri}`;
+    }
+    return null;
+  }
+
+  getFromCache(platform) {
+    try {
+      const key = this.getCacheKey(platform);
+      if (!key) return null;
+
+      const cached = localStorage.getItem(key);
+      if (!cached) return null;
+
+      const data = JSON.parse(cached);
+      const now = Date.now();
+
+      // Check if cache is still valid
+      if (now - data.timestamp < this.cacheDuration) {
+        return data.comments;
+      }
+
+      // Cache expired, remove it
+      localStorage.removeItem(key);
+      return null;
+    } catch (error) {
+      console.warn('Error reading from cache:', error);
+      return null;
+    }
+  }
+
+  saveToCache(platform, comments) {
+    try {
+      const key = this.getCacheKey(platform);
+      if (!key) return;
+
+      const data = {
+        timestamp: Date.now(),
+        comments: comments
+      };
+
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (error) {
+      console.warn('Error saving to cache:', error);
+    }
+  }
+
+  showError(message) {
+    const container = document.getElementById("social-comments-list");
+    if (container) {
+      container.innerHTML = `<div class="error-message">${this.escapeHtml(message)}</div>`;
+    }
+  }
+
+  showLoading() {
+    const container = document.getElementById("social-comments-list");
+    if (container) {
+      container.innerHTML = '<div><span class="loading-spinner"></span>Loading comments...</div>';
+    }
+  }
+
   async loadComments() {
     if (this.commentsLoaded) return;
 
-    document.getElementById("social-comments-list").innerHTML =
-      "Loading comments...";
+    // Check if DOMPurify is available (mandatory for security)
+    if (typeof DOMPurify === "undefined") {
+      this.showError("Security library failed to load. Cannot display comments safely.");
+      return;
+    }
+
+    this.showLoading();
 
     try {
-      // Load Mastodon comments if configured
+      // Load both platforms in parallel for better performance
+      const promises = [];
+
       if (this.mastodonTootId) {
-        await this.loadMastodonComments();
+        promises.push(
+          this.loadMastodonComments().catch(error => ({
+            platform: 'mastodon',
+            error: error.message
+          }))
+        );
       }
 
-      // Load Bluesky comments if configured
       if (this.blueskyPostUri) {
-        await this.loadBlueskyComments();
+        promises.push(
+          this.loadBlueskyComments().catch(error => ({
+            platform: 'bluesky',
+            error: error.message
+          }))
+        );
       }
 
-      // Filter out original posts for display but include their stats in total
+      const results = await Promise.all(promises);
+
+      // Check for errors
+      const errors = results.filter(r => r && r.error);
+      if (errors.length > 0 && this.allComments.length === 0) {
+        const errorMessages = errors.map(e => `${e.platform}: ${e.error}`).join('; ');
+        this.showError(`Failed to load comments. ${errorMessages}`);
+        return;
+      }
+
+      // Filter and sort comments
       const originalPosts = this.allComments.filter(comment => comment.isOriginalPost);
-      const replies = this.allComments.filter(comment => !comment.isOriginalPost);
-      
+      let replies = this.allComments.filter(comment => !comment.isOriginalPost);
+
+      // Apply max comments limit if set
+      if (this.maxComments > 0 && replies.length > this.maxComments) {
+        replies = replies.slice(0, this.maxComments);
+      }
+
       // Sort replies by date
       replies.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-      // Calculate total stats including original posts
-      const totalStats = this.allComments.reduce((acc, comment) => {
-        acc.replies += comment.stats.replies || 0;
-        acc.reposts += comment.stats.reposts || 0;
-        acc.likes += comment.stats.likes || 0;
-        return acc;
-      }, { replies: 0, reposts: 0, likes: 0 });
 
       // Render comments
       if (replies.length > 0 || originalPosts.length > 0) {
         const commentsContainer = document.getElementById("social-comments-list");
         commentsContainer.innerHTML = "";
 
-        // Add stats container
-        const statsContainer = document.createElement('div');
-        statsContainer.className = 'comments-stats';
-        statsContainer.style.cssText = `
-          display: flex;
-          gap: 20px;
-          margin-bottom: 15px;
-          color: var(--font-color);
-          font-size: calc(var(--font-size) * 0.9);
-          padding: var(--bs-card-spacer-y, 1rem) var(--bs-card-spacer-x, 1rem);
-          background: var(--block-background-color);
-          border-radius: var(--block-border-radius);
-          border: var(--block-border-width) var(--block-border-color) solid;
-        `;
+        // Add stats if enabled and we have original posts
+        if (this.showStats && originalPosts.length > 0) {
+          const statsHtml = this.buildStatsHTML(originalPosts);
+          const statsDiv = document.createElement('div');
+          statsDiv.innerHTML = DOMPurify.sanitize(statsHtml);
+          commentsContainer.appendChild(statsDiv.firstChild);
+        }
 
-        // Add stats with icons
-        statsContainer.innerHTML = `
-          <div title="Total Replies">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
-              <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
-            </svg>
-            ${totalStats.replies}
-          </div>
-          <div title="Total Boosts">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
-              <path d="M23.77 15.67c-.292-.293-.767-.293-1.06 0l-2.22 2.22V7.65c0-2.068-1.683-3.75-3.75-3.75h-5.85c-.414 0-.75.336-.75.75s.336.75.75.75h5.85c1.24 0 2.25 1.01 2.25 2.25v10.24l-2.22-2.22c-.293-.293-.768-.293-1.06 0s-.294.768 0 1.06l3.5 3.5c.145.147.337.22.53.22s.383-.072.53-.22l3.5-3.5c.294-.292.294-.767 0-1.06zm-10.66 3.28H7.26c-1.24 0-2.25-1.01-2.25-2.25V6.46l2.22 2.22c.148.147.34.22.532.22s.384-.073.53-.22c.293-.293.293-.768 0-1.06l-3.5-3.5c-.293-.294-.768-.294-1.06 0l-3.5 3.5c-.294.292-.294.767 0 1.06s.767.293 1.06 0l2.22-2.22V16.7c0 2.068 1.683 3.75 3.75 3.75h5.85c.414 0 .75-.336.75-.75s-.337-.75-.75-.75z"/>
-            </svg>
-            ${totalStats.reposts}
-          </div>
-          <div title="Total Favorites">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
-              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-            </svg>
-            ${totalStats.likes}
-          </div>
-        `;
-
-        commentsContainer.appendChild(statsContainer);
-
-        // Render replies only
+        // Use DocumentFragment for better performance
+        const fragment = document.createDocumentFragment();
         replies.forEach(comment => {
-          this.renderComment(comment);
+          const commentElement = this.buildCommentElement(comment);
+          fragment.appendChild(commentElement);
         });
+
+        commentsContainer.appendChild(fragment);
       } else {
         document.getElementById("social-comments-list").innerHTML =
           "<p>No comments found</p>";
@@ -341,26 +491,88 @@ class SocialComments extends HTMLElement {
       this.commentsLoaded = true;
     } catch (error) {
       console.error("Error loading comments:", error);
-      document.getElementById("social-comments-list").innerHTML =
-        "<p>Error loading comments</p>";
+      this.showError("An unexpected error occurred while loading comments.");
     }
   }
 
+  buildStatsHTML(originalPosts) {
+    // Calculate stats from original posts only
+    const totalStats = originalPosts.reduce((acc, comment) => {
+      acc.replies += comment.stats.replies || 0;
+      acc.reposts += comment.stats.reposts || 0;
+      acc.likes += comment.stats.likes || 0;
+      return acc;
+    }, { replies: 0, reposts: 0, likes: 0 });
+
+    return `
+      <div class="comments-stats" style="
+        display: flex;
+        gap: 20px;
+        margin-bottom: 15px;
+        color: var(--font-color);
+        font-size: calc(var(--font-size) * 0.9);
+        padding: var(--bs-card-spacer-y, 1rem) var(--bs-card-spacer-x, 1rem);
+        background: var(--block-background-color);
+        border-radius: var(--block-border-radius);
+        border: var(--block-border-width) var(--block-border-color) solid;
+      ">
+        <div title="Total Replies" aria-label="Total Replies: ${totalStats.replies}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;" aria-hidden="true">
+            <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
+          </svg>
+          ${totalStats.replies}
+        </div>
+        <div title="Total Boosts" aria-label="Total Boosts: ${totalStats.reposts}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;" aria-hidden="true">
+            <path d="M23.77 15.67c-.292-.293-.767-.293-1.06 0l-2.22 2.22V7.65c0-2.068-1.683-3.75-3.75-3.75h-5.85c-.414 0-.75.336-.75.75s.336.75.75.75h5.85c1.24 0 2.25 1.01 2.25 2.25v10.24l-2.22-2.22c-.293-.293-.768-.293-1.06 0s-.294.768 0 1.06l3.5 3.5c.145.147.337.22.53.22s.383-.072.53-.22l3.5-3.5c.294-.292.294-.767 0-1.06zm-10.66 3.28H7.26c-1.24 0-2.25-1.01-2.25-2.25V6.46l2.22 2.22c.148.147.34.22.532.22s.384-.073.53-.22c.293-.293.293-.768 0-1.06l-3.5-3.5c-.293-.294-.768-.294-1.06 0l-3.5 3.5c-.294.292-.294.767 0 1.06s.767.293 1.06 0l2.22-2.22V16.7c0 2.068 1.683 3.75 3.75 3.75h5.85c.414 0 .75-.336.75-.75s-.337-.75-.75-.75z"/>
+          </svg>
+          ${totalStats.reposts}
+        </div>
+        <div title="Total Favorites" aria-label="Total Favorites: ${totalStats.likes}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;" aria-hidden="true">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+          ${totalStats.likes}
+        </div>
+      </div>
+    `;
+  }
+
   async loadMastodonComments() {
+    // Check cache first
+    const cached = this.getFromCache('mastodon');
+    if (cached) {
+      this.allComments.push(...cached);
+      return;
+    }
+
     try {
-      // First get the original toot's stats
-      const statusResponse = await fetch(
-        `https://${this.mastodonHost}/api/v1/statuses/${this.mastodonTootId}`
-      );
+      // Fetch status and context in parallel
+      const [statusResponse, contextResponse] = await Promise.all([
+        fetch(`https://${this.mastodonHost}/api/v1/statuses/${this.mastodonTootId}`),
+        fetch(`https://${this.mastodonHost}/api/v1/statuses/${this.mastodonTootId}/context`)
+      ]);
+
+      if (!statusResponse.ok) {
+        throw new Error(`Failed to fetch Mastodon post: ${statusResponse.status} ${statusResponse.statusText}`);
+      }
+
+      if (!contextResponse.ok) {
+        throw new Error(`Failed to fetch Mastodon replies: ${contextResponse.status} ${contextResponse.statusText}`);
+      }
+
       const statusData = await statusResponse.json();
-      
+      const contextData = await contextResponse.json();
+
+      const mastodonComments = [];
+
       // Add the original toot's stats
-      this.allComments.push({
+      mastodonComments.push({
         platform: 'mastodon',
         id: statusData.id,
         content: statusData.content,
         author: {
-          name: statusData.account.display_name,
+          name: statusData.account.display_name || statusData.account.username,
           handle: this.getMastodonHandle(statusData.account),
           avatar: statusData.account.avatar_static,
           url: statusData.account.url
@@ -376,20 +588,15 @@ class SocialComments extends HTMLElement {
         isOriginalPost: true
       });
 
-      // Then get the context (replies)
-      const contextResponse = await fetch(
-        `https://${this.mastodonHost}/api/v1/statuses/${this.mastodonTootId}/context`
-      );
-      const contextData = await contextResponse.json();
-
+      // Process replies
       if (contextData.descendants && Array.isArray(contextData.descendants)) {
         contextData.descendants.forEach(toot => {
-          this.allComments.push({
+          mastodonComments.push({
             platform: 'mastodon',
             id: toot.id,
             content: toot.content,
             author: {
-              name: toot.account.display_name,
+              name: toot.account.display_name || toot.account.username,
               handle: this.getMastodonHandle(toot.account),
               avatar: toot.account.avatar_static,
               url: toot.account.url
@@ -406,12 +613,25 @@ class SocialComments extends HTMLElement {
           });
         });
       }
+
+      // Save to cache
+      this.saveToCache('mastodon', mastodonComments);
+      this.allComments.push(...mastodonComments);
+
     } catch (error) {
       console.error("Error loading Mastodon comments:", error);
+      throw new Error(`Unable to load Mastodon comments: ${error.message}`);
     }
   }
 
   async loadBlueskyComments() {
+    // Check cache first
+    const cached = this.getFromCache('bluesky');
+    if (cached) {
+      this.allComments.push(...cached);
+      return;
+    }
+
     try {
       const params = new URLSearchParams({ uri: this.blueskyPostUri });
       const response = await fetch(
@@ -422,67 +642,78 @@ class SocialComments extends HTMLElement {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch Bluesky thread: ${response.statusText}`);
+        throw new Error(`Failed to fetch Bluesky thread: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
-      
+      const blueskyComments = [];
+
       // Add the original post's stats
       if (data.thread?.post) {
         const post = data.thread.post;
-        this.allComments.push({
+        blueskyComments.push({
           platform: 'bluesky',
           id: post.uri,
           content: post.record.text,
           author: {
             name: post.author.displayName || post.author.handle,
-            handle: post.author.handle,
+            handle: `@${post.author.handle}`,
             avatar: post.author.avatar,
             url: `https://bsky.app/profile/${post.author.did}`
           },
           date: post.indexedAt,
           url: `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split('/').pop()}`,
           stats: {
-            replies: post.replyCount,
-            reposts: post.repostCount,
-            likes: post.likeCount
+            replies: post.replyCount || 0,
+            reposts: post.repostCount || 0,
+            likes: post.likeCount || 0
           },
           isOriginalPost: true
         });
       }
 
+      // Process replies
       if (data.thread && data.thread.replies) {
-        this.processBlueskyReplies(data.thread.replies);
+        this.processBlueskyReplies(data.thread.replies, blueskyComments);
       }
+
+      // Save to cache
+      this.saveToCache('bluesky', blueskyComments);
+      this.allComments.push(...blueskyComments);
+
     } catch (error) {
       console.error("Error loading Bluesky comments:", error);
+      throw new Error(`Unable to load Bluesky comments: ${error.message}`);
     }
   }
 
-  processBlueskyReplies(replies) {
+  processBlueskyReplies(replies, commentsArray) {
     replies.forEach(reply => {
-      this.allComments.push({
+      if (!reply.post) return;
+
+      commentsArray.push({
         platform: 'bluesky',
         id: reply.post.uri,
         content: reply.post.record.text,
         author: {
           name: reply.post.author.displayName || reply.post.author.handle,
-          handle: reply.post.author.handle,
+          handle: `@${reply.post.author.handle}`,
           avatar: reply.post.author.avatar,
           url: `https://bsky.app/profile/${reply.post.author.did}`
         },
         date: reply.post.indexedAt,
         url: `https://bsky.app/profile/${reply.post.author.handle}/post/${reply.post.uri.split('/').pop()}`,
         stats: {
-          replies: reply.post.replyCount,
-          reposts: reply.post.repostCount,
-          likes: reply.post.likeCount
+          replies: reply.post.replyCount || 0,
+          reposts: reply.post.repostCount || 0,
+          likes: reply.post.likeCount || 0
         },
         inReplyTo: reply.post.reply?.parent?.uri || reply.post.reply?.root?.uri
       });
 
+      // Recursively process nested replies
       if (reply.replies && reply.replies.length > 0) {
-        this.processBlueskyReplies(reply.replies);
+        this.processBlueskyReplies(reply.replies, commentsArray);
       }
     });
   }
@@ -490,84 +721,156 @@ class SocialComments extends HTMLElement {
   getMastodonHandle(account) {
     let handle = `@${account.acct}`;
     if (account.acct.indexOf("@") === -1) {
-      const domain = new URL(account.url);
-      handle += `@${domain.hostname}`;
+      try {
+        const domain = new URL(account.url);
+        handle += `@${domain.hostname}`;
+      } catch (error) {
+        console.warn('Error parsing account URL:', error);
+      }
     }
     return handle;
   }
 
-  renderComment(comment) {
+  buildCommentElement(comment) {
     const div = document.createElement("div");
     div.classList.add("social-comment");
-    
-    // Only indent if it's a reply to another reply, not to the original post
-    const isReplyToReply = comment.inReplyTo && 
-      (comment.platform === 'mastodon' ? 
-        comment.inReplyTo !== this.mastodonTootId :
-        comment.inReplyTo !== this.blueskyPostUri);
-    
-    if (isReplyToReply) {
-      div.style.marginLeft = "var(--comment-indent)";
+
+    // Calculate indentation for threaded replies
+    const indent = this.calculateIndentation(comment);
+    if (indent > 0) {
+      div.style.marginLeft = `calc(var(--comment-indent) * ${indent})`;
     }
 
-    const platformIcon = comment.platform === 'mastodon' ? 
-      '<i class="fab fa-mastodon" style="color: var(--mastodon-color)"></i>' : 
-      '<i class="fa-brands fa-bluesky" style="color: var(--bluesky-color)"></i>';
+    const platformInfo = this.getPlatformInfo(comment.platform);
+    const timeHtml = this.formatTime(comment.date);
+    const contentHtml = comment.platform === 'mastodon' ?
+      comment.content :
+      this.formatBlueskyContent(comment.content);
 
     div.innerHTML = `
       <div class="author">
         <div class="avatar">
-          <img src="${this.escapeHtml(comment.author.avatar)}" height=48 width=48 alt="">
+          <img src="${this.escapeHtml(comment.author.avatar)}"
+               width="48"
+               height="48"
+               alt="${this.escapeHtml(comment.author.name)} avatar"
+               loading="lazy">
         </div>
         <div class="details">
-          <a class="name" href="${comment.author.url}" rel="nofollow">${this.escapeHtml(comment.author.name)}</a>
-          <a class="user" href="${comment.author.url}" rel="nofollow">${this.escapeHtml(comment.author.handle)}</a>
+          <a class="name" href="${this.escapeHtml(comment.author.url)}" rel="nofollow">
+            ${this.escapeHtml(comment.author.name)}
+          </a>
+          <a class="user" href="${this.escapeHtml(comment.author.url)}" rel="nofollow">
+            ${this.escapeHtml(comment.author.handle)}
+          </a>
         </div>
-        <span class="platform-indicator">
-          ${platformIcon}
+        <span class="platform-indicator" aria-label="Posted on ${platformInfo.name}">
+          ${platformInfo.icon}
         </span>
-        <a class="date" href="${comment.url}" rel="nofollow">
-          ${new Date(comment.date).toLocaleDateString()}<br>${new Date(comment.date).toLocaleTimeString()}
-        </a>
+        ${timeHtml}
       </div>
-      <div class="content">${comment.platform === 'mastodon' ? comment.content : this.formatBlueskyContent(comment.content)}</div>
+      <div class="content">${contentHtml}</div>
       ${comment.attachments ? this.renderAttachments(comment.attachments) : ''}
+      ${this.buildStatusHTML(comment)}
+    `;
+
+    // Sanitize with DOMPurify (already checked it's loaded)
+    div.innerHTML = DOMPurify.sanitize(div.innerHTML);
+
+    return div;
+  }
+
+  calculateIndentation(comment) {
+    // Only indent if it's a reply to another reply, not to the original post
+    if (!comment.inReplyTo) return 0;
+
+    if (comment.platform === 'mastodon') {
+      return comment.inReplyTo !== this.mastodonTootId ? 1 : 0;
+    } else if (comment.platform === 'bluesky') {
+      return comment.inReplyTo !== this.blueskyPostUri ? 1 : 0;
+    }
+
+    return 0;
+  }
+
+  getPlatformInfo(platform) {
+    if (platform === 'mastodon') {
+      return {
+        name: 'Mastodon',
+        icon: '<i class="fab fa-mastodon" style="color: var(--mastodon-color)" aria-hidden="true"></i>'
+      };
+    } else {
+      return {
+        name: 'Bluesky',
+        icon: '<i class="fa-brands fa-bluesky" style="color: var(--bluesky-color)" aria-hidden="true"></i>'
+      };
+    }
+  }
+
+  formatTime(dateString) {
+    try {
+      const date = new Date(dateString);
+      const isoDate = date.toISOString();
+      const displayDate = date.toLocaleDateString();
+      const displayTime = date.toLocaleTimeString();
+
+      return `
+        <time class="date" datetime="${isoDate}" title="${displayDate} ${displayTime}">
+          ${displayDate}<br>${displayTime}
+        </time>
+      `;
+    } catch (error) {
+      console.warn('Error formatting date:', error);
+      return `<span class="date">${this.escapeHtml(dateString)}</span>`;
+    }
+  }
+
+  buildStatusHTML(comment) {
+    const hasReplies = comment.stats.replies > 0;
+    const hasReposts = comment.stats.reposts > 0;
+    const hasLikes = comment.stats.likes > 0;
+
+    const repostLabel = comment.platform === 'mastodon' ? 'reblogs' : 'reposts';
+    const likeLabel = comment.platform === 'mastodon' ? 'favourites' : 'likes';
+
+    return `
       <div class="status">
-        <div class="replies ${comment.stats.replies > 0 ? 'active' : ''}">
-          <a href="${comment.url}" rel="nofollow">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+        <div class="replies ${hasReplies ? 'active' : ''}" aria-label="${comment.stats.replies} replies">
+          <a href="${this.escapeHtml(comment.url)}" rel="nofollow" aria-label="View ${comment.stats.replies} replies">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
+            </svg>
             ${comment.stats.replies || ''}
           </a>
         </div>
-        <div class="${comment.platform === 'mastodon' ? 'reblogs' : 'reposts'} ${comment.stats.reposts > 0 ? 'active' : ''}">
-          <a href="${comment.url}" rel="nofollow">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.77 15.67c-.292-.293-.767-.293-1.06 0l-2.22 2.22V7.65c0-2.068-1.683-3.75-3.75-3.75h-5.85c-.414 0-.75.336-.75.75s.336.75.75.75h5.85c1.24 0 2.25 1.01 2.25 2.25v10.24l-2.22-2.22c-.293-.293-.768-.293-1.06 0s-.294.768 0 1.06l3.5 3.5c.145.147.337.22.53.22s.383-.072.53-.22l3.5-3.5c.294-.292.294-.767 0-1.06zm-10.66 3.28H7.26c-1.24 0-2.25-1.01-2.25-2.25V6.46l2.22 2.22c.148.147.34.22.532.22s.384-.073.53-.22c.293-.293.293-.768 0-1.06l-3.5-3.5c-.293-.294-.768-.294-1.06 0l-3.5 3.5c-.294.292-.294.767 0 1.06s.767.293 1.06 0l2.22-2.22V16.7c0 2.068 1.683 3.75 3.75 3.75h5.85c.414 0 .75-.336.75-.75s-.337-.75-.75-.75z"/></svg>
+        <div class="${repostLabel} ${hasReposts ? 'active' : ''}" aria-label="${comment.stats.reposts} ${repostLabel}">
+          <a href="${this.escapeHtml(comment.url)}" rel="nofollow" aria-label="View ${comment.stats.reposts} ${repostLabel}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M23.77 15.67c-.292-.293-.767-.293-1.06 0l-2.22 2.22V7.65c0-2.068-1.683-3.75-3.75-3.75h-5.85c-.414 0-.75.336-.75.75s.336.75.75.75h5.85c1.24 0 2.25 1.01 2.25 2.25v10.24l-2.22-2.22c-.293-.293-.768-.293-1.06 0s-.294.768 0 1.06l3.5 3.5c.145.147.337.22.53.22s.383-.072.53-.22l3.5-3.5c.294-.292.294-.767 0-1.06zm-10.66 3.28H7.26c-1.24 0-2.25-1.01-2.25-2.25V6.46l2.22 2.22c.148.147.34.22.532.22s.384-.073.53-.22c.293-.293.293-.768 0-1.06l-3.5-3.5c-.293-.294-.768-.294-1.06 0l-3.5 3.5c-.294.292-.294.767 0 1.06s.767.293 1.06 0l2.22-2.22V16.7c0 2.068 1.683 3.75 3.75 3.75h5.85c.414 0 .75-.336.75-.75s-.337-.75-.75-.75z"/>
+            </svg>
             ${comment.stats.reposts || ''}
           </a>
         </div>
-        <div class="${comment.platform === 'mastodon' ? 'favourites' : 'likes'} ${comment.stats.likes > 0 ? 'active' : ''}">
-          <a href="${comment.url}" rel="nofollow">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        <div class="${likeLabel} ${hasLikes ? 'active' : ''}" aria-label="${comment.stats.likes} ${likeLabel}">
+          <a href="${this.escapeHtml(comment.url)}" rel="nofollow" aria-label="View ${comment.stats.likes} ${likeLabel}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
             ${comment.stats.likes || ''}
           </a>
         </div>
       </div>
     `;
-
-    if (typeof DOMPurify !== "undefined") {
-      div.innerHTML = DOMPurify.sanitize(div.innerHTML);
-    }
-
-    document.getElementById("social-comments-list").appendChild(div);
   }
 
   formatBlueskyContent(text) {
-    // Create arrays to store our special elements and their replacements
+    if (!text) return '';
+
+    // Store elements and their replacements
     const elements = [];
     let tempText = text;
     let counter = 0;
-    
-    // Function to store an element and return a placeholder
+
     const storePlaceholder = (element, link, display) => {
       const placeholder = `__ELEMENT_${counter}__`;
       elements.push({
@@ -580,26 +883,26 @@ class SocialComments extends HTMLElement {
 
     // Extract URLs
     const urlPattern = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
-    tempText = tempText.replace(urlPattern, (url) => 
+    tempText = tempText.replace(urlPattern, (url) =>
       storePlaceholder(url, url, url)
     );
 
     // Extract mentions
     const mentionPattern = /@([a-zA-Z0-9.-]+)/g;
-    tempText = tempText.replace(mentionPattern, (match, handle) => 
+    tempText = tempText.replace(mentionPattern, (match, handle) =>
       storePlaceholder(match, `https://bsky.app/profile/${handle}`, match)
     );
 
     // Extract hashtags
     const hashtagPattern = /#([a-zA-Z0-9_]+)/g;
-    tempText = tempText.replace(hashtagPattern, (match, tag) => 
+    tempText = tempText.replace(hashtagPattern, (match, tag) =>
       storePlaceholder(match, `https://bsky.app/search?q=${encodeURIComponent(match)}`, match)
     );
 
-    // Escape the remaining text
+    // Escape remaining text
     tempText = this.escapeHtml(tempText);
 
-    // Replace placeholders with their HTML elements
+    // Replace placeholders with HTML
     elements.forEach(({placeholder, html}) => {
       tempText = tempText.replace(placeholder, html);
     });
@@ -609,27 +912,42 @@ class SocialComments extends HTMLElement {
 
   renderAttachments(attachments) {
     if (!attachments || attachments.length === 0) return '';
-    
-    return `
-      <div class="attachments">
-        ${attachments.map(attachment => {
-          if (attachment.type === "image") {
-            return `<a href="${attachment.url}" rel="nofollow">
-              <img src="${attachment.preview_url}" alt="${this.escapeHtml(attachment.description)}" />
-            </a>`;
-          } else if (attachment.type === "video") {
-            return `<video controls><source src="${attachment.url}" type="${attachment.mime_type}"></video>`;
-          } else if (attachment.type === "gifv") {
-            return `<video autoplay loop muted playsinline><source src="${attachment.url}" type="${attachment.mime_type}"></video>`;
-          } else if (attachment.type === "audio") {
-            return `<audio controls><source src="${attachment.url}" type="${attachment.mime_type}"></audio>`;
-          } else {
-            return `<a href="${attachment.url}" rel="nofollow">${attachment.type}</a>`;
-          }
-        }).join("")}
-      </div>
-    `;
+
+    const attachmentHtml = attachments.map(attachment => {
+      if (attachment.type === "image") {
+        const altText = attachment.description ? this.escapeHtml(attachment.description) : 'Attached image';
+        return `<a href="${this.escapeHtml(attachment.url)}" rel="nofollow">
+          <img src="${this.escapeHtml(attachment.preview_url)}"
+               alt="${altText}"
+               loading="lazy" />
+        </a>`;
+      } else if (attachment.type === "video") {
+        return `<video controls aria-label="Attached video">
+          <source src="${this.escapeHtml(attachment.url)}" type="${this.escapeHtml(attachment.mime_type)}">
+          Your browser does not support the video tag.
+        </video>`;
+      } else if (attachment.type === "gifv") {
+        return `<video autoplay loop muted playsinline aria-label="Animated GIF">
+          <source src="${this.escapeHtml(attachment.url)}" type="${this.escapeHtml(attachment.mime_type)}">
+        </video>`;
+      } else if (attachment.type === "audio") {
+        return `<audio controls aria-label="Attached audio">
+          <source src="${this.escapeHtml(attachment.url)}" type="${this.escapeHtml(attachment.mime_type)}">
+          Your browser does not support the audio element.
+        </audio>`;
+      } else {
+        return `<a href="${this.escapeHtml(attachment.url)}" rel="nofollow">
+          ${this.escapeHtml(attachment.type)} attachment
+        </a>`;
+      }
+    }).join("");
+
+    return `<div class="attachments">${attachmentHtml}</div>`;
   }
 }
+
+// Static properties for one-time loading
+SocialComments.fontAwesomeLoaded = false;
+SocialComments.stylesLoaded = false;
 
 customElements.define("social-comments", SocialComments);
