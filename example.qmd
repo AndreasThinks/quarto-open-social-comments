@@ -8,6 +8,8 @@ mastodon_comments:
   toot_id: "113816106546915207"
 bluesky_comments:
   post_uri: "https://bsky.app/profile/andreasthinks.me/post/3lfkk62sk4k2g"
+social_comments_options:
+  hide_author_replies: true
 ---
 
 ## Heading
