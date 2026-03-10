@@ -1,0 +1,38 @@
+{
+  "Social comments with Mastodon": {
+    "prefix": "mastodon",
+    "body": [
+      "filters:",
+      "  - open-social-comments",
+      "mastodon_comments:",
+      "  user: \"${1:AndreasThinks}\"",
+      "  host: \"${2:fosstodon.org}\"",
+      "  toot_id: \"${3:111995180253316042}\""
+    ],
+    "description": "Enable Mastodon comments for a post."
+  },
+  "Social comments with Bluesky": {
+    "prefix": "bluesky",
+    "body": [
+      "filters:",
+      "  - open-social-comments",
+      "bluesky_comments:",
+      "  post_uri: \"${1:https://bsky.app/profile/user/post/postid}\""
+    ],
+    "description": "Enable Bluesky comments for a post."
+  },
+  "Social comments with both platforms": {
+    "prefix": "both",
+    "body": [
+      "filters:",
+      "  - open-social-comments",
+      "mastodon_comments:",
+      "  user: \"${1:AndreasThinks}\"",
+      "  host: \"${2:fosstodon.org}\"",
+      "  toot_id: \"${3:111995180253316042}\"",
+      "bluesky_comments:",
+      "  post_uri: \"${4:https://bsky.app/profile/user/post/postid}\""
+    ],
+    "description": "Enable both Mastodon and Bluesky comments."
+  }
+}
