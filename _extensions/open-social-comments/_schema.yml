@@ -1,0 +1,23 @@
+$schema: https://m.canouil.dev/quarto-wizard/assets/schema/v1/extension-schema.json
+
+options:
+  mastodon_comments:
+    type: object
+    description: Mastodon source post details used to load comments.
+    properties:
+      user:
+        type: string
+        description: Mastodon account handle without leading @.
+      host:
+        type: string
+        description: Mastodon instance host name.
+      toot_id:
+        type: string
+        description: Status identifier from the Mastodon post URL.
+  bluesky_comments:
+    type: object
+    description: Bluesky source post details used to load comments.
+    properties:
+      post_uri:
+        type: string
+        description: Bluesky post URL to fetch and display comments for.
