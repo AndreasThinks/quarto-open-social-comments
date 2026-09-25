@@ -1,60 +1,33 @@
-local function ensureHtmlDeps()
-  quarto.doc.addHtmlDependency({
-      name = 'open-social-comments',
-      version = '1.0.0',
-      scripts = {"social-comments.js"}
-  })
+-- Modified September 2026: append a static element without rewriting the page DOM.
+local function attribute(value)
+  return pandoc.utils.stringify(value):gsub('&', '&amp;'):gsub('"', '&quot;')
+    :gsub("'", '&#39;'):gsub('<', '&lt;'):gsub('>', '&gt;')
 end
 
-function Meta(m)
-  ensureHtmlDeps()
-  
-  -- Initialize variables for both platforms
-  local has_comments = false
-  local social_html = '<social-comments'
-  local js_vars = '<script type="text/javascript">\n'
-  
-  -- Handle Mastodon configuration
-  if m.mastodon_comments and m.mastodon_comments.user and m.mastodon_comments.toot_id and m.mastodon_comments.host then
-      local user = pandoc.utils.stringify(m.mastodon_comments.user)
-      local toot_id = pandoc.utils.stringify(m.mastodon_comments.toot_id)
-      local host = pandoc.utils.stringify(m.mastodon_comments.host)
-      
-      js_vars = js_vars ..
-      'var mastodonHost = "' .. host .. '";\n' ..
-      'var mastodonUser = "' .. user .. '";\n' ..
-      'var mastodonTootId = "' .. toot_id .. '";\n'
-      
-      has_comments = true
+function Pandoc(doc)
+  if not quarto.doc.isFormat('html') then return doc end
+  local attributes = {}
+  local mastodon = doc.meta.mastodon_comments
+  local bluesky = doc.meta.bluesky_comments
+  if mastodon then
+    if not (mastodon.user and mastodon.host and mastodon.toot_id) then
+      error('mastodon_comments requires user, host and toot_id (quote the toot_id).')
+    end
+    table.insert(attributes, 'mastodon-host="' .. attribute(mastodon.host) .. '"')
+    table.insert(attributes, 'mastodon-user="' .. attribute(mastodon.user) .. '"')
+    table.insert(attributes, 'mastodon-toot-id="' .. attribute(mastodon.toot_id) .. '"')
   end
-  
-  -- Handle Bluesky configuration
-  if m.bluesky_comments and m.bluesky_comments.post_uri then
-      local post_uri = pandoc.utils.stringify(m.bluesky_comments.post_uri)
-      social_html = social_html .. ' bluesky-post="' .. post_uri .. '"'
-      has_comments = true
+  if bluesky then
+    if not bluesky.post_uri then error('bluesky_comments requires post_uri.') end
+    table.insert(attributes, 'bluesky-post="' .. attribute(bluesky.post_uri) .. '"')
   end
-  
-  social_html = social_html .. '></social-comments>'
-  js_vars = js_vars .. '</script>'
-  
-  if has_comments then
-      -- JavaScript to inject social comments into a specific div
-      local inject_script = [[
-<script type="text/javascript">
-document.addEventListener('DOMContentLoaded', function() {
-  var div = document.getElementById('quarto-content');
-  if(div) {
-    div.innerHTML += `]] .. social_html .. [[`;
-  }
-});
-</script>
-]]
-
-      -- Include external scripts directly
-      local script_html = '<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.1/purify.min.js" integrity="sha512-uHOKtSfJWScGmyyFr2O2+efpDx2nhwHU2v7MVeptzZoiC7bdF6Ny/CmZhN2AwIK1oCFiVQQ5DA/L9FSzyPNu6Q==" crossorigin="anonymous"></script>'
-
-      -- Insert these elements in the document's head
-      quarto.doc.includeText("in-header", script_html .. inject_script .. js_vars)
+  if #attributes > 0 then
+    quarto.doc.addHtmlDependency({
+      name = 'open-social-comments', version = '1.1.0',
+      scripts = {'vendor/purify.min.js', 'social-comments.js'}
+    })
+    doc.blocks:insert(pandoc.RawBlock('html', '<social-comments ' .. table.concat(attributes, ' ') ..
+      '><noscript>Please enable JavaScript to view the social comments.</noscript></social-comments>'))
   end
+  return doc
 end

@@ -1,25 +1,29 @@
+(() => {
+// Modified September 2026: threaded rendering and safe, instance-local loading.
 const styles = `
-:root {
+social-comments {
+  display: block;
+  min-width: 0;
   --font-color: #5d686f;
   --font-size: 1.0rem;
   --block-border-width: 1px;
   --block-border-radius: 3px;
   --block-border-color: #ededf0;
   --block-background-color: #f7f8f8;
-  --comment-indent: 40px;
+  --comment-indent: 24px;
 }
 
-#social-comments-list {
+social-comments .social-comments-list {
   margin: 0 auto;
   margin-top: 1rem;
 }
 
-.social-comment {
+social-comments .social-comment {
   background-color: var(--block-background-color);
   border-radius: var(--block-border-radius);
   border: var(--block-border-width) var(--block-border-color) solid;
   padding: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
   display: flex;
   flex-direction: column;
   color: var(--font-color);
@@ -30,11 +34,11 @@ const styles = `
   overflow-wrap: break-word;
 }
 
-.social-comment p {
+social-comments .social-comment p {
   margin-bottom: 0px;
 }
 
-.social-comment .author {
+social-comments .social-comment .author {
   padding-top: 0;
   display: flex;
   flex-wrap: wrap;
@@ -42,11 +46,11 @@ const styles = `
   align-items: flex-start;
 }
 
-.social-comment .author a {
+social-comments .social-comment .author a {
   text-decoration: none;
 }
 
-.social-comment .author .avatar img {
+social-comments .social-comment .author .avatar img {
   margin-right: 0.5rem;
   width: 48px;
   height: 48px;
@@ -54,37 +58,38 @@ const styles = `
   border-radius: 5px;
 }
 
-.social-comment .author .details {
+social-comments .social-comment .author .details {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
 }
 
-.social-comment .author .details .name {
+social-comments .social-comment .author .details .name {
   font-weight: bold;
 }
 
-.social-comment .author .details .user {
+social-comments .social-comment .author .details .user {
   color: #5d686f;
   font-size: medium;
 }
 
-.social-comment .author .date {
+social-comments .social-comment .author .date {
   margin-left: auto;
   font-size: small;
   white-space: nowrap;
 }
 
-.social-comment .content {
+social-comments .social-comment .content {
   margin: 0.75rem 0;
   width: 100%;
   overflow-wrap: break-word;
   word-wrap: break-word;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
-.social-comment .attachments {
+social-comments .social-comment .attachments {
   margin: 0.5rem 0;
   width: 100%;
   display: flex;
@@ -92,512 +97,465 @@ const styles = `
   gap: 0.5rem;
 }
 
-.social-comment .attachments > * {
+social-comments .social-comment .attachments > * {
   margin: 0;
   max-width: 100%;
 }
 
-.social-comment .attachments img {
+social-comments .social-comment .attachments img {
   max-width: 100%;
 }
 
-.social-comment .content p:first-child {
+social-comments .social-comment .content p:first-child {
   margin-top: 0;
   margin-bottom: 0;
 }
 
-.social-comment .status > div {
+social-comments .social-comment .status > div {
   display: inline-block;
   margin-right: 15px;
 }
 
-.social-comment .status a {
+social-comments .social-comment .status a {
   color: #5d686f;
   text-decoration: none;
 }
 
-.social-comment .status .replies.active a {
+social-comments .social-comment .status .replies.active a {
   color: #003eaa;
 }
 
-.social-comment .status .reblogs.active a,
-.social-comment .status .reposts.active a {
+social-comments .social-comment .status .reblogs.active a,
+social-comments .social-comment .status .reposts.active a {
   color: #8c8dff;
 }
 
-.social-comment .status .favourites.active a,
-.social-comment .status .likes.active a {
+social-comments .social-comment .status .favourites.active a,
+social-comments .social-comment .status .likes.active a {
   color: #ca8f04;
 }
 
-.social-comment .platform-indicator {
+social-comments .social-comment .platform-indicator {
   margin-left: auto;
   padding: 2px;
   display: flex;
   align-items: center;
 }
 
-.social-comment .platform-indicator i {
+social-comments .social-comment .platform-indicator i {
   font-size: 16px;
+}
+social-comments .comment-thread { list-style: none; padding: 0; margin: 0; }
+social-comments .thread-offset { margin-inline-start: calc(var(--thread-depth, 0) * var(--comment-indent)); }
+social-comments .thread-toggle { margin-bottom: 1rem; cursor: pointer; }
+social-comments .comments-stats { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+social-comments .reply-context, social-comments .comments-notice { font-size: 0.9rem; }
+social-comments .reply-context { display: block; margin-bottom: 0.4rem; }
+social-comments .status { display: flex; flex-wrap: wrap; gap: 1rem; }
+social-comments .platform-indicator { font-size: 0.8rem; }
+social-comments .sensitive-content > summary { cursor: pointer; }
+@media (max-width: 600px) {
+  social-comments { --comment-indent: 12px; }
+  social-comments .social-comment { padding: 0.75rem; }
+  social-comments .social-comment .author .date { white-space: normal; }
 }
 `;
 
-class SocialComments extends HTMLElement {
-  convertBlueskyUrl(url) {
-    // Convert https://bsky.app/profile/user.bsky.social/post/postid
-    // to at://did:plc:user.bsky.social/app.bsky.feed.post/postid
-    try {
-      const match = url.match(/https:\/\/bsky\.app\/profile\/([^\/]+)\/post\/([^\/]+)/);
-      if (match) {
-        const [_, handle, postId] = match;
-        // For the API, we need to use the handle directly without converting to did:plc format
-        return `at://${handle}/app.bsky.feed.post/${postId}`;
-      }
-      // If it's already in API format, return as is
-      if (url.startsWith('at://')) {
-        return url;
-      }
-      throw new Error('Invalid Bluesky URL format');
-    } catch (error) {
-      console.error('Error converting Bluesky URL:', error);
-      return null;
+let instanceId = 0;
+const platformName = platform => platform === 'mastodon' ? 'Mastodon' : 'Bluesky';
+const count = value => Number.isSafeInteger(value) && value > 0 ? value : 0;
+const key = comment => `${comment.platform}:${comment.id}`;
+const timestamp = comment => Date.parse(comment.date) || 0;
+
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function safeUrl(value) {
+  try {
+    const url = new URL(value);
+    return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : null;
+  } catch { return null; }
+}
+
+function link(text, url, className) {
+  const href = safeUrl(url);
+  const node = element(href ? 'a' : 'span', className, text);
+  if (href) {
+    node.href = href;
+    node.rel = 'nofollow noopener noreferrer';
+  }
+  return node;
+}
+
+function blueskyReference(value) {
+  let actor, postId;
+  if (value.startsWith('at://')) {
+    const match = value.match(/^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([A-Za-z0-9._~:-]+)$/);
+    if (match) [, actor, postId] = match;
+  } else {
+    const url = new URL(value);
+    const match = url.pathname.match(/^\/profile\/([^/]+)\/post\/([A-Za-z0-9._~:-]+)\/?$/);
+    if (url.protocol === 'https:' && url.host === 'bsky.app' && !url.username && !url.password && match) {
+      [, actor, postId] = match;
+      actor = decodeURIComponent(actor);
     }
   }
+  if (!actor || !postId || !/^(?:did:[a-z]+:[A-Za-z0-9._:%-]+|[A-Za-z0-9.-]+)$/.test(actor)) {
+    throw new Error('Use a bsky.app post URL or an at:// post URI.');
+  }
+  return { actor, postId, uri: `at://${actor}/app.bsky.feed.post/${postId}`,
+    url: `https://bsky.app/profile/${encodeURIComponent(actor)}/post/${encodeURIComponent(postId)}` };
+}
 
+class SocialComments extends HTMLElement {
   constructor() {
     super();
-    
-    // Add Font Awesome CDN
-    if (!document.querySelector('link[href*="fontawesome"]')) {
-      const fontAwesomeLink = document.createElement('link');
-      fontAwesomeLink.rel = 'stylesheet';
-      fontAwesomeLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.1/css/all.min.css';
-      document.head.appendChild(fontAwesomeLink);
-    }
-
-    // Mastodon config
-    this.mastodonHost = mastodonHost || null;
-    this.mastodonUser = mastodonUser || null;
-    this.mastodonTootId = mastodonTootId || null;
-
-    // Bluesky config
-    const blueskyUrl = this.getAttribute("bluesky-post") || null;
-    // Convert normal URL to API format if needed
-    this.blueskyPostUri = blueskyUrl ? this.convertBlueskyUrl(blueskyUrl) : null;
-
-    this.commentsLoaded = false;
+    this.instanceId = ++instanceId;
     this.allComments = [];
-
-    const styleElem = document.createElement("style");
-    styleElem.innerHTML = styles;
-    document.head.appendChild(styleElem);
+    this.errors = [];
+    this.commentsLoaded = false;
   }
 
   connectedCallback() {
-    this.innerHTML = `
-      <h2>Comments</h2>
-      <noscript>
-        <div id="error">
-          Please enable JavaScript to view the social comments.
-        </div>
-      </noscript>
-      <p>Join the conversation on 
-        ${this.mastodonTootId ? `<a href="https://${this.mastodonHost}/@${this.mastodonUser}/${this.mastodonTootId}">Mastodon</a>` : ''}
-        ${this.mastodonTootId && this.blueskyPostUri ? ' or ' : ''}
-        ${this.getAttribute("bluesky-post") ? `<a href="${this.getAttribute("bluesky-post").startsWith('http') ? this.getAttribute("bluesky-post") : `https://bsky.app/profile/${this.getAttribute("bluesky-post").split('/')[2]}/post/${this.getAttribute("bluesky-post").split('/').pop()}`}">Bluesky</a>` : ''}
-      </p>
-      <div id="social-comments-list"></div>
-    `;
-
-    const comments = document.getElementById("social-comments-list");
-    const rootStyle = this.getAttribute("style");
-    if (rootStyle) {
-      comments.setAttribute("style", rootStyle);
+    // Attributes are available here even when the element was parser-created.
+    if (this.initialized) return;
+    this.initialized = true;
+    if (!document.getElementById('open-social-comments-styles')) {
+      const style = element('style');
+      style.id = 'open-social-comments-styles';
+      style.textContent = styles;
+      document.head.append(style);
     }
-    
+    this.readConfiguration();
+    this.replaceChildren(element('h2', '', 'Comments'));
+    const introduction = element('p', '', 'Join the conversation on ');
+    const sources = [];
+    if (this.mastodon) sources.push(link('Mastodon', this.mastodon.url));
+    if (this.bluesky) sources.push(link('Bluesky', this.bluesky.url));
+    sources.forEach((source, index) => { if (index) introduction.append(' or '); introduction.append(source); });
+    if (sources.length) this.append(introduction);
+    this.list = element('div', 'social-comments-list');
+    this.list.setAttribute('aria-live', 'polite');
+    this.append(this.list);
     this.loadComments();
   }
 
-  escapeHtml(unsafe) {
-    return (unsafe || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+  readConfiguration() {
+    this.configErrors = [];
+    const attribute = (name, legacy) => this.getAttribute(name) ?? globalThis[legacy];
+    const host = attribute('mastodon-host', 'mastodonHost');
+    const user = attribute('mastodon-user', 'mastodonUser');
+    const id = attribute('mastodon-toot-id', 'mastodonTootId');
+    if (host || user || id) {
+      try {
+        const origin = new URL(`https://${host}`);
+        if (!host || !user || !/^\d+$/.test(String(id)) || origin.host !== host || origin.pathname !== '/' || origin.username || origin.password || origin.search || origin.hash) {
+          throw new Error('Invalid Mastodon configuration.');
+        }
+        this.mastodon = { host, id: String(id), url: `${origin.origin}/@${encodeURIComponent(user)}/${id}` };
+      } catch { this.configErrors.push('Check the Mastodon host, user and toot_id settings.'); }
+    }
+    const post = this.getAttribute('bluesky-post');
+    if (post) {
+      try { this.bluesky = blueskyReference(post); }
+      catch { this.configErrors.push('Check the Bluesky post_uri setting.'); }
+    }
+  }
+
+  async fetchJson(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal, credentials: 'omit' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } finally { clearTimeout(timer); }
   }
 
   async loadComments() {
-    if (this.commentsLoaded) return;
-
-    document.getElementById("social-comments-list").innerHTML =
-      "Loading comments...";
-
-    try {
-      // Load Mastodon comments if configured
-      if (this.mastodonTootId) {
-        await this.loadMastodonComments();
+    if (this.loading) return;
+    this.loading = true;
+    this.commentsLoaded = false;
+    this.allComments = [];
+    this.errors = [...this.configErrors];
+    this.list.textContent = 'Loading comments…';
+    this.list.setAttribute('aria-busy', 'true');
+    const load = async (platform, loader) => {
+      try { this.allComments.push(...await loader()); }
+      catch (error) {
+        console.warn(`Unable to load ${platformName(platform)} comments:`, error);
+        this.errors.push(`${platformName(platform)} comments could not be loaded. Please try again or open the conversation above.`);
       }
+    };
+    await Promise.all([
+      this.mastodon ? load('mastodon', () => this.loadMastodonComments()) : null,
+      this.bluesky ? load('bluesky', () => this.loadBlueskyComments()) : null
+    ]);
+    this.renderComments();
+    this.list.setAttribute('aria-busy', 'false');
+    this.loading = false;
+    this.commentsLoaded = true;
+  }
 
-      // Load Bluesky comments if configured
-      if (this.blueskyPostUri) {
-        await this.loadBlueskyComments();
-      }
-
-      // Filter out original posts for display but include their stats in total
-      const originalPosts = this.allComments.filter(comment => comment.isOriginalPost);
-      const replies = this.allComments.filter(comment => !comment.isOriginalPost);
-      
-      // Sort replies by date
-      replies.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-      // Calculate total stats including original posts
-      const totalStats = this.allComments.reduce((acc, comment) => {
-        acc.replies += comment.stats.replies || 0;
-        acc.reposts += comment.stats.reposts || 0;
-        acc.likes += comment.stats.likes || 0;
-        return acc;
-      }, { replies: 0, reposts: 0, likes: 0 });
-
-      // Render comments
-      if (replies.length > 0 || originalPosts.length > 0) {
-        const commentsContainer = document.getElementById("social-comments-list");
-        commentsContainer.innerHTML = "";
-
-        // Add stats container
-        const statsContainer = document.createElement('div');
-        statsContainer.className = 'comments-stats';
-        statsContainer.style.cssText = `
-          display: flex;
-          gap: 20px;
-          margin-bottom: 15px;
-          color: var(--font-color);
-          font-size: 0.9rem;
-          padding: 10px;
-          background: var(--block-background-color);
-          border-radius: var(--block-border-radius);
-          border: var(--block-border-width) var(--block-border-color) solid;
-        `;
-
-        // Add stats with icons
-        statsContainer.innerHTML = `
-          <div title="Total Replies">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
-              <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
-            </svg>
-            ${totalStats.replies}
-          </div>
-          <div title="Total Boosts">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
-              <path d="M23.77 15.67c-.292-.293-.767-.293-1.06 0l-2.22 2.22V7.65c0-2.068-1.683-3.75-3.75-3.75h-5.85c-.414 0-.75.336-.75.75s.336.75.75.75h5.85c1.24 0 2.25 1.01 2.25 2.25v10.24l-2.22-2.22c-.293-.293-.768-.293-1.06 0s-.294.768 0 1.06l3.5 3.5c.145.147.337.22.53.22s.383-.072.53-.22l3.5-3.5c.294-.292.294-.767 0-1.06zm-10.66 3.28H7.26c-1.24 0-2.25-1.01-2.25-2.25V6.46l2.22 2.22c.148.147.34.22.532.22s.384-.073.53-.22c.293-.293.293-.768 0-1.06l-3.5-3.5c-.293-.294-.768-.294-1.06 0l-3.5 3.5c-.294.292-.294.767 0 1.06s.767.293 1.06 0l2.22-2.22V16.7c0 2.068 1.683 3.75 3.75 3.75h5.85c.414 0 .75-.336.75-.75s-.337-.75-.75-.75z"/>
-            </svg>
-            ${totalStats.reposts}
-          </div>
-          <div title="Total Favorites">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;">
-              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-            </svg>
-            ${totalStats.likes}
-          </div>
-        `;
-
-        commentsContainer.appendChild(statsContainer);
-
-        // Render replies only
-        replies.forEach(comment => {
-          this.renderComment(comment);
-        });
-      } else {
-        document.getElementById("social-comments-list").innerHTML =
-          "<p>No comments found</p>";
-      }
-
-      this.commentsLoaded = true;
-    } catch (error) {
-      console.error("Error loading comments:", error);
-      document.getElementById("social-comments-list").innerHTML =
-        "<p>Error loading comments</p>";
-    }
+  mastodonComment(status, original = false) {
+    if (!status?.id || !status.account) return null;
+    const account = status.account;
+    let handle = account.acct || account.username || '';
+    if (!handle.includes('@')) handle += `@${this.mastodon.host}`;
+    return {
+      platform: 'mastodon', id: String(status.id), inReplyTo: status.in_reply_to_id == null ? null : String(status.in_reply_to_id),
+      content: status.content || '', author: { name: account.display_name || handle, handle: `@${handle}`, avatar: account.avatar_static, url: account.url },
+      date: status.created_at, url: status.url || status.uri,
+      stats: { replies: count(status.replies_count), reposts: count(status.reblogs_count), likes: count(status.favourites_count) },
+      attachments: Array.isArray(status.media_attachments) ? status.media_attachments : [],
+      warning: status.spoiler_text || (status.sensitive ? 'Sensitive content' : ''), isOriginalPost: original
+    };
   }
 
   async loadMastodonComments() {
-    try {
-      // First get the original toot's stats
-      const statusResponse = await fetch(
-        `https://${this.mastodonHost}/api/v1/statuses/${this.mastodonTootId}`
-      );
-      const statusData = await statusResponse.json();
-      
-      // Add the original toot's stats
-      this.allComments.push({
-        platform: 'mastodon',
-        id: statusData.id,
-        content: statusData.content,
-        author: {
-          name: statusData.account.display_name,
-          handle: this.getMastodonHandle(statusData.account),
-          avatar: statusData.account.avatar_static,
-          url: statusData.account.url
-        },
-        date: statusData.created_at,
-        url: statusData.url,
-        stats: {
-          replies: statusData.replies_count,
-          reposts: statusData.reblogs_count,
-          likes: statusData.favourites_count
-        },
-        attachments: statusData.media_attachments,
-        isOriginalPost: true
-      });
+    const base = `https://${this.mastodon.host}/api/v1/statuses/${this.mastodon.id}`;
+    const [status, context] = await Promise.all([this.fetchJson(base), this.fetchJson(`${base}/context`)]);
+    const original = this.mastodonComment(status, true);
+    if (!original || !Array.isArray(context.descendants)) throw new Error('Invalid Mastodon response');
+    return [original, ...context.descendants.map(reply => this.mastodonComment(reply)).filter(Boolean)];
+  }
 
-      // Then get the context (replies)
-      const contextResponse = await fetch(
-        `https://${this.mastodonHost}/api/v1/statuses/${this.mastodonTootId}/context`
-      );
-      const contextData = await contextResponse.json();
-
-      if (contextData.descendants && Array.isArray(contextData.descendants)) {
-        contextData.descendants.forEach(toot => {
-          this.allComments.push({
-            platform: 'mastodon',
-            id: toot.id,
-            content: toot.content,
-            author: {
-              name: toot.account.display_name,
-              handle: this.getMastodonHandle(toot.account),
-              avatar: toot.account.avatar_static,
-              url: toot.account.url
-            },
-            date: toot.created_at,
-            url: toot.url,
-            stats: {
-              replies: toot.replies_count,
-              reposts: toot.reblogs_count,
-              likes: toot.favourites_count
-            },
-            attachments: toot.media_attachments,
-            inReplyTo: toot.in_reply_to_id
-          });
-        });
-      }
-    } catch (error) {
-      console.error("Error loading Mastodon comments:", error);
-    }
+  blueskyComment(post, parent, original = false) {
+    if (!post?.uri || !post.author || !post.record) return null;
+    let reference;
+    try { reference = blueskyReference(post.uri); } catch { return null; }
+    return {
+      platform: 'bluesky', id: post.uri, inReplyTo: post.record.reply?.parent?.uri || parent || null,
+      content: post.record.text || '', facets: post.record.facets,
+      author: { name: post.author.displayName || post.author.handle, handle: `@${post.author.handle}`, avatar: post.author.avatar,
+        url: `https://bsky.app/profile/${encodeURIComponent(post.author.did || post.author.handle)}` },
+      date: post.record.createdAt || post.indexedAt, url: reference.url,
+      stats: { replies: count(post.replyCount), reposts: count(post.repostCount), likes: count(post.likeCount) }, isOriginalPost: original
+    };
   }
 
   async loadBlueskyComments() {
-    try {
-      const params = new URLSearchParams({ uri: this.blueskyPostUri });
-      const response = await fetch(
-        `https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?${params.toString()}`,
-        {
-          headers: { Accept: "application/json" }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch Bluesky thread: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      // Add the original post's stats
-      if (data.thread?.post) {
-        const post = data.thread.post;
-        this.allComments.push({
-          platform: 'bluesky',
-          id: post.uri,
-          content: post.record.text,
-          author: {
-            name: post.author.displayName || post.author.handle,
-            handle: post.author.handle,
-            avatar: post.author.avatar,
-            url: `https://bsky.app/profile/${post.author.did}`
-          },
-          date: post.indexedAt,
-          url: `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split('/').pop()}`,
-          stats: {
-            replies: post.replyCount,
-            reposts: post.repostCount,
-            likes: post.likeCount
-          },
-          isOriginalPost: true
-        });
-      }
-
-      if (data.thread && data.thread.replies) {
-        this.processBlueskyReplies(data.thread.replies);
-      }
-    } catch (error) {
-      console.error("Error loading Bluesky comments:", error);
+    let uri = this.bluesky.uri;
+    if (!this.bluesky.actor.startsWith('did:')) {
+      const params = new URLSearchParams({ handle: this.bluesky.actor });
+      const resolved = await this.fetchJson(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?${params}`);
+      if (typeof resolved.did !== 'string' || !resolved.did.startsWith('did:')) throw new Error('Unable to resolve Bluesky handle');
+      uri = `at://${resolved.did}/app.bsky.feed.post/${this.bluesky.postId}`;
     }
+    const params = new URLSearchParams({ uri, depth: '100', parentHeight: '0' });
+    const data = await this.fetchJson(`https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?${params}`);
+    const original = this.blueskyComment(data.thread?.post, null, true);
+    if (!original) throw new Error('Bluesky post is unavailable');
+    const comments = [original];
+    const pending = [{ replies: data.thread.replies, parent: original.id }];
+    while (pending.length) {
+      const { replies, parent } = pending.pop();
+      if (!Array.isArray(replies)) continue;
+      for (const reply of replies) {
+        if (!reply) continue;
+        const comment = this.blueskyComment(reply.post, parent);
+        if (comment) comments.push(comment);
+        // Blocked/deleted union members have no post. Keep any visible descendants.
+        pending.push({ replies: reply.replies, parent: comment?.id || reply.uri || parent });
+      }
+    }
+    return comments;
   }
 
-  processBlueskyReplies(replies) {
-    replies.forEach(reply => {
-      this.allComments.push({
-        platform: 'bluesky',
-        id: reply.post.uri,
-        content: reply.post.record.text,
-        author: {
-          name: reply.post.author.displayName || reply.post.author.handle,
-          handle: reply.post.author.handle,
-          avatar: reply.post.author.avatar,
-          url: `https://bsky.app/profile/${reply.post.author.did}`
-        },
-        date: reply.post.indexedAt,
-        url: `https://bsky.app/profile/${reply.post.author.handle}/post/${reply.post.uri.split('/').pop()}`,
-        stats: {
-          replies: reply.post.replyCount,
-          reposts: reply.post.repostCount,
-          likes: reply.post.likeCount
-        },
-        inReplyTo: reply.post.reply?.parent.uri
-      });
-
-      if (reply.replies && reply.replies.length > 0) {
-        this.processBlueskyReplies(reply.replies);
+  buildThreads() {
+    const unique = new Map(this.allComments.map(comment => [key(comment), comment]));
+    const originals = new Set([...unique.values()].filter(c => c.isOriginalPost).map(key));
+    const nodes = new Map([...unique.values()].filter(c => !c.isOriginalPost).map(comment => [key(comment), { comment, children: [] }]));
+    const roots = [];
+    for (const node of nodes.values()) {
+      const parentKey = `${node.comment.platform}:${node.comment.inReplyTo}`;
+      let parent = nodes.get(parentKey);
+      // Guard malformed self-links and cycles without dropping comments.
+      const seen = new Set([key(node.comment)]);
+      let ancestor = parent;
+      while (ancestor) {
+        const ancestorKey = key(ancestor.comment);
+        if (seen.has(ancestorKey)) { parent = null; break; }
+        seen.add(ancestorKey);
+        ancestor = nodes.get(`${ancestor.comment.platform}:${ancestor.comment.inReplyTo}`);
       }
-    });
+      node.parent = parent || null;
+      node.orphan = !!node.comment.inReplyTo && !parent && !originals.has(parentKey);
+      if (parent) parent.children.push(node); else roots.push(node);
+    }
+    const byDate = (a, b) => timestamp(a.comment) - timestamp(b.comment) || key(a.comment).localeCompare(key(b.comment));
+    for (const node of nodes.values()) node.children.sort(byDate);
+    roots.sort((a, b) => -byDate(a, b));
+    return { roots, nodes, unique };
   }
 
-  getMastodonHandle(account) {
-    let handle = `@${account.acct}`;
-    if (account.acct.indexOf("@") === -1) {
-      const domain = new URL(account.url);
-      handle += `@${domain.hostname}`;
+  renderComments() {
+    this.list.replaceChildren();
+    const { roots, nodes, unique } = this.buildThreads();
+    for (const message of this.errors) this.list.append(element('p', 'comments-notice', message));
+    if (this.errors.length && (this.mastodon || this.bluesky)) {
+      const retry = element('button', '', 'Retry loading comments');
+      retry.type = 'button';
+      retry.addEventListener('click', () => this.loadComments());
+      this.list.append(retry);
     }
-    return handle;
+    if (unique.size) {
+      const totals = [...unique.values()].reduce((sum, c) => ({ likes: sum.likes + c.stats.likes, reposts: sum.reposts + c.stats.reposts }), { likes: 0, reposts: 0 });
+      const stats = element('div', 'comments-stats');
+      stats.append(element('span', '', `${nodes.size} loaded ${nodes.size === 1 ? 'reply' : 'replies'}`),
+        element('span', '', `${totals.reposts} boosts / reposts`), element('span', '', `${totals.likes} likes`));
+      stats.title = 'Engagement counts include the original posts and the replies loaded here.';
+      this.list.append(stats);
+    }
+    if (!roots.length && !this.errors.length) this.list.append(element('p', '', 'No comments found.'));
+    const ids = new Map([...nodes.keys()].map((id, index) => [id, `social-comment-${this.instanceId}-${index}`]));
+    const rootList = element('ul', 'comment-thread');
+    this.list.append(rootList);
+    const pending = roots.slice().reverse().map(node => ({ node, container: rootList, depth: 0 }));
+    while (pending.length) {
+      const { node, container, depth } = pending.pop();
+      const item = element('li');
+      const article = this.renderComment(node.comment);
+      article.id = ids.get(key(node.comment));
+      article.classList.add('thread-offset');
+      article.style.setProperty('--thread-depth', Math.min(depth, 3));
+      if (node.parent) {
+        const context = element('a', 'reply-context', `Replying to ${node.parent.comment.author.name}`);
+        context.href = `#${ids.get(key(node.parent.comment))}`;
+        article.prepend(context);
+      } else if (node.orphan) {
+        article.prepend(element('p', 'reply-context', 'Reply to an unavailable comment'));
+      }
+      item.append(article);
+      container.append(item);
+      if (node.children.length) {
+        const details = element('details', 'thread-replies');
+        details.open = true;
+        const summary = element('summary', 'thread-toggle thread-offset', `${node.children.length} ${node.children.length === 1 ? 'reply' : 'replies'}`);
+        summary.style.setProperty('--thread-depth', Math.min(depth + 1, 3));
+        const children = element('ul', 'comment-thread');
+        details.append(summary, children);
+        item.append(details);
+        for (const child of node.children.slice().reverse()) pending.push({ node: child, container: children, depth: depth + 1 });
+      }
+      if (node.comment.stats.replies > node.children.length) {
+        article.append(link('More replies may be available on ' + platformName(node.comment.platform), node.comment.url, 'reply-context'));
+      }
+    }
+    if (this.mastodon || this.bluesky) this.list.append(element('p', 'comments-notice', 'Only publicly available replies returned by each platform are shown. Open the original conversation for the full thread.'));
   }
 
   renderComment(comment) {
-    const div = document.createElement("div");
-    div.classList.add("social-comment");
-    
-    if (comment.inReplyTo) {
-      div.style.marginLeft = "var(--comment-indent)";
+    const article = element('article', 'social-comment');
+    const author = element('div', 'author');
+    const avatarUrl = safeUrl(comment.author.avatar);
+    if (avatarUrl) {
+      const avatar = element('div', 'avatar');
+      const image = element('img');
+      image.src = avatarUrl; image.alt = ''; image.width = 48; image.height = 48; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer';
+      avatar.append(image); author.append(avatar);
     }
-
-    const platformIcon = comment.platform === 'mastodon' ? 
-      '<i class="fab fa-mastodon" style="color: #563acc"></i>' : 
-      '<i class="fa-brands fa-bluesky" style="color: #0085ff"></i>';
-
-    div.innerHTML = `
-      <div class="author">
-        <div class="avatar">
-          <img src="${this.escapeHtml(comment.author.avatar)}" height=60 width=60 alt="">
-        </div>
-        <div class="details">
-          <a class="name" href="${comment.author.url}" rel="nofollow">${this.escapeHtml(comment.author.name)}</a>
-          <a class="user" href="${comment.author.url}" rel="nofollow">${this.escapeHtml(comment.author.handle)}</a>
-        </div>
-        <a class="date" href="${comment.url}" rel="nofollow">
-          ${new Date(comment.date).toLocaleString()}
-        </a>
-        <span class="platform-indicator">
-          ${platformIcon}
-        </span>
-      </div>
-      <div class="content">${comment.platform === 'mastodon' ? comment.content : this.formatBlueskyContent(comment.content)}</div>
-      ${comment.attachments ? this.renderAttachments(comment.attachments) : ''}
-      <div class="status">
-        <div class="replies ${comment.stats.replies > 0 ? 'active' : ''}">
-          <a href="${comment.url}" rel="nofollow">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
-            ${comment.stats.replies || ''}
-          </a>
-        </div>
-        <div class="${comment.platform === 'mastodon' ? 'reblogs' : 'reposts'} ${comment.stats.reposts > 0 ? 'active' : ''}">
-          <a href="${comment.url}" rel="nofollow">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.77 15.67c-.292-.293-.767-.293-1.06 0l-2.22 2.22V7.65c0-2.068-1.683-3.75-3.75-3.75h-5.85c-.414 0-.75.336-.75.75s.336.75.75.75h5.85c1.24 0 2.25 1.01 2.25 2.25v10.24l-2.22-2.22c-.293-.293-.768-.293-1.06 0s-.294.768 0 1.06l3.5 3.5c.145.147.337.22.53.22s.383-.072.53-.22l3.5-3.5c.294-.292.294-.767 0-1.06zm-10.66 3.28H7.26c-1.24 0-2.25-1.01-2.25-2.25V6.46l2.22 2.22c.148.147.34.22.532.22s.384-.073.53-.22c.293-.293.293-.768 0-1.06l-3.5-3.5c-.293-.294-.768-.294-1.06 0l-3.5 3.5c-.294.292-.294.767 0 1.06s.767.293 1.06 0l2.22-2.22V16.7c0 2.068 1.683 3.75 3.75 3.75h5.85c.414 0 .75-.336.75-.75s-.337-.75-.75-.75z"/></svg>
-            ${comment.stats.reposts || ''}
-          </a>
-        </div>
-        <div class="${comment.platform === 'mastodon' ? 'favourites' : 'likes'} ${comment.stats.likes > 0 ? 'active' : ''}">
-          <a href="${comment.url}" rel="nofollow">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-            ${comment.stats.likes || ''}
-          </a>
-        </div>
-      </div>
-    `;
-
-    if (typeof DOMPurify !== "undefined") {
-      div.innerHTML = DOMPurify.sanitize(div.innerHTML);
+    const details = element('div', 'details');
+    details.append(link(comment.author.name, comment.author.url, 'name'), link(comment.author.handle, comment.author.url, 'user'));
+    const date = new Date(comment.date);
+    const dateLink = link('', comment.url, 'date');
+    const time = element('time', '', Number.isNaN(date.getTime()) ? 'View post' : date.toLocaleString());
+    if (!Number.isNaN(date.getTime())) time.dateTime = date.toISOString();
+    dateLink.append(time);
+    author.append(details, dateLink, element('span', 'platform-indicator', platformName(comment.platform)));
+    article.append(author);
+    let body = article;
+    if (comment.warning) {
+      body = element('details', 'sensitive-content');
+      body.append(element('summary', '', comment.warning));
+      article.append(body);
     }
-
-    document.getElementById("social-comments-list").appendChild(div);
+    const content = element('div', 'content');
+    if (comment.platform === 'mastodon') {
+      if (globalThis.DOMPurify?.isSupported) {
+        // Sanitize before insertion, restrict to formatting, and never insert unsanitized HTML.
+        content.append(globalThis.DOMPurify.sanitize(comment.content, {
+          RETURN_DOM_FRAGMENT: true,
+          ALLOWED_TAGS: ['p', 'br', 'a', 'span', 'strong', 'em', 'b', 'i', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li'],
+          ALLOWED_ATTR: ['href', 'title', 'class'], ALLOW_DATA_ATTR: false
+        }));
+        for (const anchor of content.querySelectorAll('a')) {
+          const href = safeUrl(anchor.getAttribute('href'));
+          if (href) { anchor.href = href; anchor.rel = 'nofollow noopener noreferrer'; }
+          else anchor.removeAttribute('href');
+        }
+      } else { content.textContent = comment.content; }
+    } else { content.append(this.formatBlueskyContent(comment.content, comment.facets)); }
+    body.append(content);
+    if (comment.attachments?.length) body.append(this.renderAttachments(comment.attachments));
+    const status = element('div', 'status');
+    status.append(link(`Reply (${comment.stats.replies})`, comment.url), link(`Boosts / reposts: ${comment.stats.reposts}`, comment.url), link(`Likes: ${comment.stats.likes}`, comment.url));
+    article.append(status);
+    return article;
   }
 
-  formatBlueskyContent(text) {
-    // Create arrays to store our special elements and their replacements
-    const elements = [];
-    let tempText = text;
-    let counter = 0;
-    
-    // Function to store an element and return a placeholder
-    const storePlaceholder = (element, link, display) => {
-      const placeholder = `__ELEMENT_${counter}__`;
-      elements.push({
-        placeholder,
-        html: `<a href="${this.escapeHtml(link)}" rel="nofollow">${this.escapeHtml(display)}</a>`
-      });
-      counter++;
-      return placeholder;
+  formatBlueskyContent(text, facets) {
+    const fragment = document.createDocumentFragment();
+    const appendPlainText = value => {
+      let offset = 0;
+      for (const match of value.matchAll(/https?:\/\/[^\s<>"']+/g)) {
+        let url = match[0].replace(/[.,!?;:]+$/, '');
+        // Keep balanced parentheses in URLs, but leave sentence punctuation outside.
+        while (url.endsWith(')') && (url.match(/\)/g) || []).length > (url.match(/\(/g) || []).length) url = url.slice(0, -1);
+        fragment.append(value.slice(offset, match.index), link(url, url));
+        offset = match.index + url.length;
+      }
+      fragment.append(value.slice(offset));
     };
-
-    // Extract URLs
-    const urlPattern = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
-    tempText = tempText.replace(urlPattern, (url) => 
-      storePlaceholder(url, url, url)
-    );
-
-    // Extract mentions
-    const mentionPattern = /@([a-zA-Z0-9.-]+)/g;
-    tempText = tempText.replace(mentionPattern, (match, handle) => 
-      storePlaceholder(match, `https://bsky.app/profile/${handle}`, match)
-    );
-
-    // Extract hashtags
-    const hashtagPattern = /#([a-zA-Z0-9_]+)/g;
-    tempText = tempText.replace(hashtagPattern, (match, tag) => 
-      storePlaceholder(match, `https://bsky.app/search?q=${encodeURIComponent(match)}`, match)
-    );
-
-    // Escape the remaining text
-    tempText = this.escapeHtml(tempText);
-
-    // Replace placeholders with their HTML elements
-    elements.forEach(({placeholder, html}) => {
-      tempText = tempText.replace(placeholder, html);
-    });
-
-    return tempText;
+    // Facet offsets are UTF-8 bytes, not JavaScript UTF-16 string positions.
+    const bytes = new TextEncoder().encode(text);
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    let cursor = 0;
+    for (const facet of (Array.isArray(facets) ? facets : []).slice().sort((a, b) => (a?.index?.byteStart || 0) - (b?.index?.byteStart || 0))) {
+      const start = facet?.index?.byteStart, end = facet?.index?.byteEnd;
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < cursor || end <= start || end > bytes.length) continue;
+      const feature = Array.isArray(facet.features) ? facet.features[0] : null;
+      let url;
+      if (feature?.$type === 'app.bsky.richtext.facet#link') url = feature.uri;
+      if (feature?.$type === 'app.bsky.richtext.facet#mention' && typeof feature.did === 'string') url = `https://bsky.app/profile/${encodeURIComponent(feature.did)}`;
+      if (feature?.$type === 'app.bsky.richtext.facet#tag' && typeof feature.tag === 'string') url = `https://bsky.app/hashtag/${encodeURIComponent(feature.tag)}`;
+      try {
+        const before = decoder.decode(bytes.slice(cursor, start));
+        const label = decoder.decode(bytes.slice(start, end));
+        appendPlainText(before);
+        fragment.append(link(label, url));
+        cursor = end;
+      } catch { /* Ignore malformed offsets without losing the remaining text. */ }
+    }
+    appendPlainText(new TextDecoder().decode(bytes.slice(cursor)));
+    return fragment;
   }
 
   renderAttachments(attachments) {
-    if (!attachments || attachments.length === 0) return '';
-    
-    return `
-      <div class="attachments">
-        ${attachments.map(attachment => {
-          if (attachment.type === "image") {
-            return `<a href="${attachment.url}" rel="nofollow">
-              <img src="${attachment.preview_url}" alt="${this.escapeHtml(attachment.description)}" />
-            </a>`;
-          } else if (attachment.type === "video") {
-            return `<video controls><source src="${attachment.url}" type="${attachment.mime_type}"></video>`;
-          } else if (attachment.type === "gifv") {
-            return `<video autoplay loop muted playsinline><source src="${attachment.url}" type="${attachment.mime_type}"></video>`;
-          } else if (attachment.type === "audio") {
-            return `<audio controls><source src="${attachment.url}" type="${attachment.mime_type}"></audio>`;
-          } else {
-            return `<a href="${attachment.url}" rel="nofollow">${attachment.type}</a>`;
-          }
-        }).join("")}
-      </div>
-    `;
+    const container = element('div', 'attachments');
+    for (const attachment of attachments) {
+      const url = safeUrl(attachment?.url);
+      if (!url) continue;
+      if (attachment.type === 'image') {
+        const anchor = link('', url);
+        const image = element('img');
+        image.src = safeUrl(attachment.preview_url) || url;
+        image.alt = attachment.description || ''; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer';
+        anchor.append(image); container.append(anchor);
+      } else if (['video', 'gifv', 'audio'].includes(attachment.type)) {
+        const media = element(attachment.type === 'audio' ? 'audio' : 'video');
+        media.controls = true; media.preload = 'none'; media.src = url;
+        if (attachment.type === 'gifv') { media.loop = true; media.muted = true; media.playsInline = true; }
+        container.append(media);
+      } else { container.append(link('View attachment', url)); }
+    }
+    return container;
   }
 }
 
-customElements.define("social-comments", SocialComments);
+if (!customElements.get('social-comments')) customElements.define('social-comments', SocialComments);
+})();

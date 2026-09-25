@@ -1,0 +1,27 @@
+{
+  "name": "quarto-open-social-comments",
+  "version": "1.1.0",
+  "description": "This extension adds social media comments to your Quarto blog posts, supporting both Mastodon and Bluesky.",
+  "scripts": {
+    "test": "playwright test",
+    "test:filter": "node --test tests/filter.test.cjs",
+    "vendor": "node scripts/vendor.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AndreasThinks/quarto-open-social-comments.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "GPL-3.0-only",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AndreasThinks/quarto-open-social-comments/issues"
+  },
+  "homepage": "https://github.com/AndreasThinks/quarto-open-social-comments#readme",
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "dompurify": "3.4.16"
+  },
+  "private": true
+}
