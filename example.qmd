@@ -12,4 +12,4 @@ bluesky_comments:
 
 ## Heading
 
-This filter adds formatting to heading text.
+Replies to the configured Mastodon and Bluesky posts appear below as threaded conversations.
