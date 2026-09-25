@@ -24,6 +24,14 @@ quarto add AndreasThinks/quarto-open-social-comments
 
 > If you previously installed this extension as `quarto-mastodon-comments`, you don't need to make any changes. GitHub's redirects ensure that existing installations continue to work.
 
+To pin the current release instead of following `main`:
+
+```bash
+quarto add AndreasThinks/quarto-open-social-comments@v1.1.0
+```
+
+[Release notes and downloads](https://github.com/AndreasThinks/quarto-open-social-comments/releases/latest)
+
 This will install the extension under the `_extensions` subdirectory.
 If you're using version control, you will want to check in this directory.
 
@@ -137,6 +145,18 @@ instances, and mobile layout. The filter tests render real Quarto documents to
 check dependency packaging, metadata escaping, HTML insertion and non-HTML output.
 Set `QUARTO_BIN` or `CHROMIUM_PATH` if using executables outside the default paths.
 See [the review notes](docs/REVIEW.md) for remaining improvements and limitations.
+
+## Publishing releases
+
+Update the version in `_extension.yml`, the Lua dependency declaration and
+`package.json`/`package-lock.json`, and add `docs/releases/vX.Y.Z.md` with release
+notes. After the changes reach `main` and the **Test extension** workflow passes,
+the release workflow creates the version tag, publishes a GitHub release and
+attaches an archive containing the installable extension. Existing releases and
+tags are never overwritten.
+
+Quarto's unpinned install/update commands use `main`; `@vX.Y.Z` installs a specific
+tag. Users need no npm build step and should re-render their site after updating.
 
 ## Acknowledgements
 
