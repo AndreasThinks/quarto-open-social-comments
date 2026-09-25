@@ -111,6 +111,10 @@ social-comments .social-comment .content p:first-child {
   margin-bottom: 0;
 }
 
+/* Mastodon supplies these spans to shorten displayed URLs without changing href. */
+social-comments .content .invisible { display: none; }
+social-comments .content .ellipsis::after { content: "…"; }
+
 social-comments .social-comment .status > div {
   display: inline-block;
   margin-right: 15px;

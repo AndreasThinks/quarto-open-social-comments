@@ -173,10 +173,11 @@ test('content warnings remain collapsed and media retain accessible descriptions
 
 test('Mastodon hyperlinks retain full destinations, mentions and hashtag text', async ({ page }) => {
   await mount(page, { attrs: mAttrs, descendants: [mPost('2', '1', {
-    content: '<p>Read <a href="https://example.org/article?x=1&amp;y=2"><span>example.org/article…</span></a> with <a class="mention" href="https://other.test/@bob">@bob</a> about <a class="hashtag" href="https://social.test/tags/quarto">#quarto</a>.</p>'
+    content: '<p>Read <a href="https://example.org/article?x=1&amp;y=2"><span class="invisible">https://</span><span class="ellipsis">example.org/article</span><span class="invisible">?x=1&amp;y=2</span></a> with <a class="mention" href="https://other.test/@bob">@bob</a> about <a class="hashtag" href="https://social.test/tags/quarto">#quarto</a>.</p>'
   })] });
   await expect(page.locator('.content a')).toHaveCount(3);
   await expect(page.locator('.content a').nth(0)).toHaveAttribute('href', 'https://example.org/article?x=1&y=2');
+  await expect(page.locator('.content a').nth(0)).toHaveText('example.org/article', { useInnerText: true });
   await expect(page.locator('.content a').nth(1)).toHaveAttribute('href', 'https://other.test/@bob');
   await expect(page.locator('.content a').nth(2)).toHaveText('#quarto');
   await expect(page.locator('.content a').nth(0)).toHaveAttribute('rel', 'nofollow noopener noreferrer');
